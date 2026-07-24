@@ -1,0 +1,24 @@
+# Core data / ML
+pandas
+numpy
+scikit-learn
+xgboost
+torch
+
+# LLM + alerts
+groq
+python-telegram-bot
+
+# Dashboard
+streamlit
+matplotlib
+
+# Config / utils
+python-dotenv
+pyyaml
+
+# Testing
+pytest
+
+# Future hardware phase (not installed/used yet, listed for reference — see CLAUDE.md §2A)
+# pyserial

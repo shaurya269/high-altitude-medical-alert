@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Project Phases — High Altitude Medical Alert System</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+:root{
+  --bg:#0B1520; --bg-panel:#101E2E; --grid:rgba(143,163,184,0.06);
+  --ink:#EDF2F7; --ink-dim:#8FA3B8; --ink-faint:#54677D; --border:rgba(143,163,184,0.16);
+  --oxygen:#2FB8A6; --alert:#E8583D; --warn:#E8A23D; --cool:#5B8DEF;
+  --mono:'IBM Plex Mono', monospace; --sans:'IBM Plex Sans', sans-serif;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  background:linear-gradient(var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/40px 40px, var(--bg);
+  color:var(--ink); font-family:var(--sans); padding:48px 32px 80px;
+}
+.wrap{max-width:1080px; margin:0 auto;}
+header{margin-bottom:40px; border-bottom:1px solid var(--border); padding-bottom:24px;}
+.eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:0.18em; color:var(--oxygen); text-transform:uppercase; margin-bottom:10px;}
+h1{font-size:30px; font-weight:700; margin-bottom:8px;}
+.sub{color:var(--ink-dim); font-size:14.5px; max-width:640px; line-height:1.6;}
+
+.legend{display:flex; gap:20px; margin-top:18px; font-family:var(--mono); font-size:11px; color:var(--ink-dim);}
+.legend span{display:inline-flex; align-items:center; gap:6px;}
+.dot{width:9px; height:9px; border-radius:50%; display:inline-block;}
+.dot.done{background:var(--oxygen);} .dot.progress{background:var(--warn);} .dot.pending{background:var(--ink-faint);}
+
+.week{margin-top:38px;}
+.week-title{font-family:var(--mono); font-size:12px; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:14px; display:flex; align-items:center; gap:10px;}
+.week-title::after{content:''; flex:1; height:1px; background:var(--border);}
+
+.day{
+  display:grid; grid-template-columns:64px 1fr 90px; gap:16px; align-items:start;
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:6px;
+  padding:14px 18px; margin-bottom:10px;
+}
+.day-num{font-family:var(--mono); font-size:20px; font-weight:600; color:var(--ink-faint);}
+.day-title{font-weight:600; font-size:14.5px; margin-bottom:4px;}
+.day-desc{font-family:var(--mono); font-size:11px; color:var(--ink-dim); line-height:1.6;}
+.status{font-family:var(--mono); font-size:10.5px; text-align:right; padding-top:3px;}
+.status.pending{color:var(--ink-faint);}
+.status.progress{color:var(--warn);}
+.status.done{color:var(--oxygen);}
+
+footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-family:var(--mono); font-size:10.5px; color:var(--ink-faint); display:flex; justify-content:space-between;}
+.i2c-note{background:var(--bg-panel); border:1px dashed var(--border); border-radius:6px; padding:10px 16px; font-family:var(--mono); font-size:11px; color:var(--ink-dim); line-height:1.7;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Build Plan · 10 Days</div>
+    <h1>Project Phases</h1>
+    <div class="sub">Update the status column as each day's deliverables are completed. This file is the single source of truth for build progress — Claude Code should edit it directly when a phase closes.</div>
+    <div class="legend">
+      <span><i class="dot done"></i>Done</span>
+      <span><i class="dot progress"></i>In progress</span>
+      <span><i class="dot pending"></i>Pending</span>
+    </div>
+  </header>
+
+  <div class="week">
+    <div class="week-title">Week 1 — Data &amp; ML Foundation</div>
+
+    <div class="day"><div class="day-num">01</div><div><div class="day-title">Environment &amp; Data</div><div class="day-desc">Python 3.12 env · repo scaffold (src/data, src/models, src/datasource, src/llm, src/alerts, src/app) · requirements.txt · .env.example · git init · Harespod NOT downloaded yet (manual step) -- built harespod_loader.py as a ready adapter instead, per synthetic-first decision</div></div><div class="status done">DONE</div></div>
+
+    <div class="day"><div class="day-num">02</div><div><div class="day-title">Synthetic Data Generator</div><div class="day-desc">synth_data.py · docs/lls_mapping.md (LLS → severity mapping, written out) · gradual-onset (sigmoid ramp) trajectory simulation · 400 subjects, realistic class imbalance</div></div><div class="status done">DONE</div></div>
+
+    <div class="day"><div class="day-num">03</div><div><div class="day-title">Feature Engineering &amp; Split</div><div class="day-desc">feature_engineering.py · spo2_trend_5min/hr_trend_5min/ascent_rate/spo2_delta/time_at_altitude · temporal split, stratified per-tier so rare classes (HAPE/HACE) are guaranteed present in val/test · Harespod merge deferred until real data is downloaded</div></div><div class="status done">DONE</div></div>
+
+    <div class="day"><div class="day-num">04</div><div><div class="day-title">Baseline: Rule-Based Classifier</div><div class="day-desc">rule_baseline.py · clinical if/else thresholds from docs/lls_mapping.md · MATE 0.82, sanity floor confirmed beatable</div></div><div class="status done">DONE</div></div>
+
+    <div class="day"><div class="day-num">05</div><div><div class="day-title">XGBoost Ordinal Classifier</div><div class="day-desc">xgb_ordinal.py · regression + tuned threshold binning · balanced sample weights · MATE 0.59, beats baseline on every metric</div></div><div class="status done">DONE</div></div>
+
+    <div class="day"><div class="day-num">06</div><div><div class="day-title">LSTM Time-Series Model</div><div class="day-desc">lstm_model.py · 2-layer PyTorch LSTM on strided 60s raw-vitals windows · trained CPU-only (small model, no GPU needed) · MATE 0.78 -- built as the DL comparison model, XGBoost wins</div></div><div class="status done">DONE</div></div>
+
+    <div class="day"><div class="day-num">07</div><div><div class="day-title">Model Selection &amp; Save</div><div class="day-desc">predict_severity.py · compares baseline/XGBoost/LSTM on identical test set · selects XGBoost Ordinal (lowest mean-abs-tier-error) · single predict_severity() inference fn for the rest of the pipeline · 10 pytest smoke tests passing</div></div><div class="status done">DONE</div></div>
+  </div>
+
+  <div class="week">
+    <div class="week-title">Week 2 — Integration, LLM, Alerts, Demo</div>
+
+    <div class="day"><div class="day-num">08</div><div><div class="day-title">Demo Data Source</div><div class="day-desc">demo_data_source.py · DataSource interface · scenario player + manual sliders + Harespod replay (no hardware, no serial)</div></div><div class="status pending">PENDING</div></div>
+
+    <div class="day"><div class="day-num">09</div><div><div class="day-title">Groq LLM Integration</div><div class="day-desc">llm_chat.py · medical triage system prompt · guardrails · JSON structured output</div></div><div class="status pending">PENDING</div></div>
+
+    <div class="day"><div class="day-num">10</div><div><div class="day-title">Telegram Bot Alerts</div><div class="day-desc">@BotFather setup · alert_bot.py · structured alert formatting</div></div><div class="status pending">PENDING</div></div>
+
+    <div class="day"><div class="day-num">11</div><div><div class="day-title">Full Integration</div><div class="day-desc">Main loop: sensor → ML → LLM → alert · hysteresis + de-duplication</div></div><div class="status pending">PENDING</div></div>
+
+    <div class="day"><div class="day-num">12</div><div><div class="day-title">Streamlit Dashboard</div><div class="day-desc">Demo Mode control panel (scenario picker, sliders, replay) · live plots · chat UI · severity readout · alert log</div></div><div class="status pending">PENDING</div></div>
+
+    <div class="day"><div class="day-num">13</div><div><div class="day-title">Testing &amp; Edge Cases</div><div class="day-desc">Replay recordings · inject synthetic HAPE trajectory · threshold tuning</div></div><div class="status pending">PENDING</div></div>
+
+    <div class="day"><div class="day-num">14</div><div><div class="day-title">Demo Prep &amp; Docs</div><div class="day-desc">README · architecture screenshots · demo recording</div></div><div class="status pending">PENDING</div></div>
+  </div>
+
+  <div class="week" style="opacity:0.6;">
+    <div class="week-title">Phase 3 — Hardware Build (future, not started)</div>
+    <div class="day"><div class="day-num">HW</div><div><div class="day-title">Physical Build &amp; arduino_reader.py</div><div class="day-desc">Assemble Arduino Uno + MAX30102 + MLX90614 + BMP280 + PCA9306 + OLED per schematik.io design · flash firmware · implement arduino_reader.py against the same DataSource interface used by demo_data_source.py · swap in as live data source</div></div><div class="status pending">NOT STARTED</div></div>
+    <div class="i2c-note" style="margin:6px 0 0;">Begins only after Phase 1–2 (software, Demo Mode) is complete and working, and the owner explicitly requests it. See CLAUDE.md §2A.</div>
+  </div>
+
+  <footer>
+    <span>high-altitude-medical-alert · phases v1.1 · Days 1-7 complete (2026-07-25)</span>
+    <span>Claude Code: update status cells + this footer's revision note on every completed phase</span>
+  </footer>
+</div>
+</body>
+</html>

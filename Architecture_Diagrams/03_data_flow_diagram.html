@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Data Flow Diagram — High Altitude Medical Alert System</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+:root{
+  --bg:#0B1520; --bg-panel:#101E2E; --grid:rgba(143,163,184,0.06);
+  --ink:#EDF2F7; --ink-dim:#8FA3B8; --ink-faint:#54677D; --border:rgba(143,163,184,0.16);
+  --oxygen:#2FB8A6; --alert:#E8583D; --warn:#E8A23D; --cool:#5B8DEF;
+  --mono:'IBM Plex Mono', monospace; --sans:'IBM Plex Sans', sans-serif;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  background:linear-gradient(var(--grid) 1px, transparent 1px) 0 0/40px 40px,
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0/40px 40px, var(--bg);
+  color:var(--ink); font-family:var(--sans); padding:48px 32px 80px;
+}
+.wrap{max-width:1080px; margin:0 auto;}
+header{margin-bottom:40px; border-bottom:1px solid var(--border); padding-bottom:24px;}
+.eyebrow{font-family:var(--mono); font-size:12px; letter-spacing:0.18em; color:var(--oxygen); text-transform:uppercase; margin-bottom:10px;}
+h1{font-size:30px; font-weight:700; margin-bottom:8px;}
+.sub{color:var(--ink-dim); font-size:14.5px; max-width:660px; line-height:1.6;}
+
+.flow{display:flex; flex-direction:column; gap:0;}
+.stage{
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:6px;
+  padding:16px 20px; position:relative;
+}
+.stage-num{font-family:var(--mono); font-size:10.5px; color:var(--ink-faint); letter-spacing:0.1em;}
+.stage-title{font-weight:600; font-size:15px; margin:4px 0 6px;}
+.stage-desc{font-family:var(--mono); font-size:11.5px; color:var(--ink-dim); line-height:1.65;}
+.stage.oxygen{border-left:3px solid var(--oxygen);}
+.stage.cool{border-left:3px solid var(--cool);}
+.stage.warn{border-left:3px solid var(--warn);}
+.stage.alert{border-left:3px solid var(--alert);}
+
+.arrow-down{display:flex; justify-content:flex-start; padding-left:28px; margin:0;}
+.arrow-down svg{opacity:0.45;}
+
+.branch{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:0;}
+@media(max-width:760px){.branch{grid-template-columns:1fr;}}
+
+.code-note{
+  font-family:var(--mono); font-size:10.5px; color:var(--ink-faint);
+  background:#0A1420; border:1px dashed var(--border); border-radius:4px;
+  padding:8px 12px; margin-top:10px;
+}
+.code-note b{color:var(--warn);}
+
+.decision{
+  background:linear-gradient(180deg, rgba(232,88,61,0.08), transparent);
+  border:1px solid rgba(232,88,61,0.3); border-radius:6px; padding:16px 20px;
+}
+.decision .stage-title{color:var(--alert);}
+
+footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-family:var(--mono); font-size:10.5px; color:var(--ink-faint); display:flex; justify-content:space-between;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Data Flow · v1.0</div>
+    <h1>Sensor-to-Alert Data Flow</h1>
+    <div class="sub">Traces one reading cycle end to end — from raw I2C sensor values through feature engineering, ordinal severity classification, LLM interpretation, and conditional alert dispatch.</div>
+  </header>
+
+  <div class="flow">
+    <div class="stage oxygen">
+      <div class="stage-num">STAGE 1 · CURRENT PHASE</div>
+      <div class="stage-title">Demo Mode Data Entry (web UI, ~1 Hz simulated tick)</div>
+      <div class="stage-desc">Scenario player (Normal / Mild AMS / Severe AMS / HAPE / HACE) &nbsp;·&nbsp; manual sliders &nbsp;·&nbsp; Harespod recording replay — all produced via <b>demo_data_source.py</b>, no hardware involved</div>
+      <div class="code-note">Emits the same record shape a real sensor would: <b>timestamp,spo2,hr,temp,altitude</b> — via the <b>DataSource</b> interface</div>
+    </div>
+
+    <div class="arrow-down"><svg width="24" height="26"><line x1="12" y1="0" x2="12" y2="18" stroke="#54677D" stroke-width="1.5" stroke-dasharray="3,3"/><polygon points="6,18 18,18 12,26" fill="#54677D"/></svg></div>
+
+    <div class="stage" style="border-left:3px solid #54677D; opacity:0.55;">
+      <div class="stage-num">FUTURE PHASE 3 — SWAP-IN, NOT BUILT YET</div>
+      <div class="stage-title">Real Sensor Read (Arduino Uno + MAX30102 / MLX90614 / BMP280, ~1 Hz)</div>
+      <div class="stage-desc">arduino_reader.py (pyserial, 115200 baud) implements the identical DataSource interface as demo_data_source.py — drops in with no change to Stages 2–7 below</div>
+    </div>
+
+    <div class="arrow-down"><svg width="24" height="26"><line x1="12" y1="0" x2="12" y2="18" stroke="#8FA3B8" stroke-width="1.5"/><polygon points="6,18 18,18 12,26" fill="#8FA3B8"/></svg></div>
+
+    <div class="stage cool">
+      <div class="stage-num">STAGE 2</div>
+      <div class="stage-title">Buffer &amp; Validate</div>
+      <div class="stage-desc">Append reading to rolling buffer (last 10 min) → validate ranges (reject glitches/out-of-range values)</div>
+    </div>
+
+    <div class="arrow-down"><svg width="24" height="26"><line x1="12" y1="0" x2="12" y2="18" stroke="#8FA3B8" stroke-width="1.5"/><polygon points="6,18 18,18 12,26" fill="#8FA3B8"/></svg></div>
+
+    <div class="stage cool">
+      <div class="stage-num">STAGE 3</div>
+      <div class="stage-title">Feature Engineering</div>
+      <div class="stage-desc">Compute from buffer: spo2_trend_5min · hr_trend_5min · ascent_rate · expected_spo2_at_altitude (delta) · time_at_altitude</div>
+    </div>
+
+    <div class="arrow-down"><svg width="24" height="26"><line x1="12" y1="0" x2="12" y2="18" stroke="#8FA3B8" stroke-width="1.5"/><polygon points="6,18 18,18 12,26" fill="#8FA3B8"/></svg></div>
+
+    <div class="stage warn">
+      <div class="stage-num">STAGE 4</div>
+      <div class="stage-title">ML Severity Classification (XGBoost ordinal)</div>
+      <div class="stage-desc">Input: raw vitals + engineered features → Output: severity ∈ {Normal, Mild AMS, Severe AMS, HAPE risk, HACE risk} + confidence score</div>
+    </div>
+
+    <div class="arrow-down"><svg width="24" height="26"><line x1="12" y1="0" x2="12" y2="18" stroke="#8FA3B8" stroke-width="1.5"/><polygon points="6,18 18,18 12,26" fill="#8FA3B8"/></svg></div>
+
+    <div class="decision">
+      <div class="stage-num">STAGE 5</div>
+      <div class="stage-title">Hysteresis Gate</div>
+      <div class="stage-desc">Severity must persist above threshold for N consecutive readings (not a single spike) AND cooldown period elapsed since last alert → prevents false-alarm spam from motion artifacts or transient dips</div>
+    </div>
+
+    <div class="arrow-down"><svg width="24" height="26"><line x1="12" y1="0" x2="12" y2="18" stroke="#8FA3B8" stroke-width="1.5"/><polygon points="6,18 18,18 12,26" fill="#8FA3B8"/></svg></div>
+
+    <div class="branch">
+      <div class="stage cool">
+        <div class="stage-num">STAGE 6A · ALWAYS</div>
+        <div class="stage-title">LLM Interpretation (Groq / Llama 3.3 70B)</div>
+        <div class="stage-desc">Severity + vitals → plain-language explanation for dashboard chat &amp; alert body. Guardrailed: interprets readings, never diagnoses.</div>
+      </div>
+      <div class="stage alert">
+        <div class="stage-num">STAGE 6B · IF GATE PASSES</div>
+        <div class="stage-title">Telegram Alert Dispatch</div>
+        <div class="stage-desc">Structured message → medical facility chat: severity tier, vitals snapshot, LLM summary, timestamp</div>
+      </div>
+    </div>
+
+    <div class="arrow-down"><svg width="24" height="26"><line x1="12" y1="0" x2="12" y2="18" stroke="#8FA3B8" stroke-width="1.5"/><polygon points="6,18 18,18 12,26" fill="#8FA3B8"/></svg></div>
+
+    <div class="stage oxygen">
+      <div class="stage-num">STAGE 7</div>
+      <div class="stage-title">Streamlit Dashboard Update</div>
+      <div class="stage-desc">Live plots refresh · severity badge updates · alert log entry (if dispatched) · chat remains available for live Q&amp;A</div>
+    </div>
+  </div>
+
+  <footer>
+    <span>high-altitude-medical-alert · data-flow v1.0</span>
+    <span>update thresholds/stages here as tuning changes in Phase 13</span>
+  </footer>
+</div>
+</body>
+</html>

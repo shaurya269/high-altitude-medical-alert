@@ -1,0 +1,36 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Data (raw/downloaded/generated — regenerable, and Harespod's license means we
+# shouldn't redistribute it via git even if the owner drops it in data/raw/)
+data/raw/
+data/synthetic/
+data/processed/
+
+# Trained model artifacts (regenerable via src/models training scripts)
+src/models/artifacts/
+*.pt
+*.pth
+*.xgb
+*.joblib
+*.pkl
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
