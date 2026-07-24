@@ -20,5 +20,9 @@ pyyaml
 # Testing
 pytest
 
+# Notebooks (teaching walkthroughs in notebooks/)
+jupyter
+ipykernel
+
 # Future hardware phase (not installed/used yet, listed for reference — see CLAUDE.md §2A)
 # pyserial
