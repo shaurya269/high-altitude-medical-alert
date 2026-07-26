@@ -85,15 +85,15 @@ footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); fo
   <div class="week">
     <div class="week-title">Week 2 — Integration, LLM, Alerts, Demo</div>
 
-    <div class="day"><div class="day-num">08</div><div><div class="day-title">Demo Data Source</div><div class="day-desc">demo_data_source.py · DataSource interface · scenario player + manual sliders + Harespod replay (no hardware, no serial)</div></div><div class="status pending">PENDING</div></div>
+    <div class="day"><div class="day-num">08</div><div><div class="day-title">Demo Data Source</div><div class="day-desc">src/datasource/: base.py (DataSource ABC, .next_reading()/.reset()) · scenario_player.py (reuses synth_data.simulate_trajectory) · manual_override.py (live slider values) · harespod_replay.py · buffer.py (Stage 2: rolling window + glitch rejection)</div></div><div class="status done">DONE</div></div>
 
-    <div class="day"><div class="day-num">09</div><div><div class="day-title">Groq LLM Integration</div><div class="day-desc">llm_chat.py · medical triage system prompt · guardrails · JSON structured output</div></div><div class="status pending">PENDING</div></div>
+    <div class="day"><div class="day-num">09</div><div><div class="day-title">Groq LLM Integration</div><div class="day-desc">llm_chat.py · prompts/system_prompt.py (all 4 non-negotiable guardrails, verified resistant to direct user pressure to override/get dosing advice) · explain_severity() + chat() + generate_alert_content() (JSON response_format) · graceful fallback when GROQ_API_KEY unset</div></div><div class="status done">DONE</div></div>
 
-    <div class="day"><div class="day-num">10</div><div><div class="day-title">Telegram Bot Alerts</div><div class="day-desc">@BotFather setup · alert_bot.py · structured alert formatting</div></div><div class="status pending">PENDING</div></div>
+    <div class="day"><div class="day-num">10</div><div><div class="day-title">Telegram Bot Alerts</div><div class="day-desc">@BotFather bot created + verified live (test message delivered) · alert_bot.py · format_alert_message() (severity/vitals/summary/timestamp) · async python-telegram-bot wrapped sync · local JSONL log fallback + alert log reader</div></div><div class="status done">DONE</div></div>
 
-    <div class="day"><div class="day-num">11</div><div><div class="day-title">Full Integration</div><div class="day-desc">Main loop: sensor → ML → LLM → alert · hysteresis + de-duplication</div></div><div class="status pending">PENDING</div></div>
+    <div class="day"><div class="day-num">11</div><div><div class="day-title">Full Integration</div><div class="day-desc">src/pipeline.py MedicalAlertPipeline.tick() · src/alerts/hysteresis.py (N-consecutive-readings + cooldown gate, injectable clock for fast tests) · LLM explanation cached per severity-tier-change (not per-tick, to stay within Groq free-tier limits) · verified a sustained HACE-risk scenario fires exactly one alert per cooldown window, a Normal scenario fires none</div></div><div class="status done">DONE</div></div>
 
-    <div class="day"><div class="day-num">12</div><div><div class="day-title">Streamlit Dashboard</div><div class="day-desc">Demo Mode control panel (scenario picker, sliders, replay) · live plots · chat UI · severity readout · alert log</div></div><div class="status pending">PENDING</div></div>
+    <div class="day"><div class="day-num">12</div><div><div class="day-title">Streamlit Dashboard</div><div class="day-desc">src/app/streamlit_app.py · Demo Mode panel (scenario picker/sliders/replay) · live vitals + severity-index charts · chat tab · alert log tab · session_state-persisted pipeline across reruns · verified in a real headless browser (Playwright) AND via streamlit.testing.v1.AppTest in the automated suite</div></div><div class="status done">DONE</div></div>
 
     <div class="day"><div class="day-num">13</div><div><div class="day-title">Testing &amp; Edge Cases</div><div class="day-desc">Replay recordings · inject synthetic HAPE trajectory · threshold tuning</div></div><div class="status pending">PENDING</div></div>
 
@@ -107,7 +107,7 @@ footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); fo
   </div>
 
   <footer>
-    <span>high-altitude-medical-alert · phases v1.2 · Days 1-7 complete + real-data integration (2026-07-27)</span>
+    <span>high-altitude-medical-alert · phases v1.3 · Days 1-12 complete (2026-07-27)</span>
     <span>Claude Code: update status cells + this footer's revision note on every completed phase</span>
   </footer>
 </div>
