@@ -65,17 +65,19 @@ footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); fo
   <div class="week">
     <div class="week-title">Week 1 — Data &amp; ML Foundation</div>
 
-    <div class="day"><div class="day-num">01</div><div><div class="day-title">Environment &amp; Data</div><div class="day-desc">Python 3.12 env · repo scaffold (src/data, src/models, src/datasource, src/llm, src/alerts, src/app) · requirements.txt · .env.example · git init · Harespod NOT downloaded yet (manual step) -- built harespod_loader.py as a ready adapter instead, per synthetic-first decision</div></div><div class="status done">DONE</div></div>
+    <div class="day"><div class="day-num">01</div><div><div class="day-title">Environment &amp; Data</div><div class="day-desc">Python 3.12 env · repo scaffold (src/data, src/models, src/datasource, src/llm, src/alerts, src/app) · requirements.txt · .env.example · git init · Harespod downloaded (data/raw/harespod/) and fully integrated -- see Day 1b</div></div><div class="status done">DONE</div></div>
+
+    <div class="day"><div class="day-num">01b</div><div><div class="day-title">Real Data Integration (post-Day-7 addition)</div><div class="day-desc">harespod_loader.py rewritten against the real download (15 subjects) · fixed a device-range rescale bug (produced implausible 174bpm mean HR, corrected to a physiological 40-160bpm/70-100% range) · fixed a GMT/local-time 8h offset affecting 6/15 subjects' altitude markers · investigated + downloaded a 2nd real dataset (pilot_altitude_loader.py, 20 subjects) but excluded it from labeling -- confirmed oxygen-enriched protocol, not ambient air · label_real_data.py applies rule_baseline's thresholds post-hoc · merged into train.csv ONLY (val/test stay pure-synthetic, avoiding baseline-evaluation circularity) · Groq + Telegram API keys obtained and verified live (real test message delivered)</div></div><div class="status done">DONE</div></div>
 
     <div class="day"><div class="day-num">02</div><div><div class="day-title">Synthetic Data Generator</div><div class="day-desc">synth_data.py · docs/lls_mapping.md (LLS → severity mapping, written out) · gradual-onset (sigmoid ramp) trajectory simulation · 400 subjects, realistic class imbalance</div></div><div class="status done">DONE</div></div>
 
-    <div class="day"><div class="day-num">03</div><div><div class="day-title">Feature Engineering &amp; Split</div><div class="day-desc">feature_engineering.py · spo2_trend_5min/hr_trend_5min/ascent_rate/spo2_delta/time_at_altitude · temporal split, stratified per-tier so rare classes (HAPE/HACE) are guaranteed present in val/test · Harespod merge deferred until real data is downloaded</div></div><div class="status done">DONE</div></div>
+    <div class="day"><div class="day-num">03</div><div><div class="day-title">Feature Engineering &amp; Split</div><div class="day-desc">feature_engineering.py · spo2_trend_5min/hr_trend_5min/ascent_rate/spo2_delta/time_at_altitude · temporal split, stratified per-tier so rare classes (HAPE/HACE) are guaranteed present in val/test · real Harespod data merged into train split only (see Day 1b)</div></div><div class="status done">DONE</div></div>
 
-    <div class="day"><div class="day-num">04</div><div><div class="day-title">Baseline: Rule-Based Classifier</div><div class="day-desc">rule_baseline.py · clinical if/else thresholds from docs/lls_mapping.md · MATE 0.82, sanity floor confirmed beatable</div></div><div class="status done">DONE</div></div>
+    <div class="day"><div class="day-num">04</div><div><div class="day-title">Baseline: Rule-Based Classifier</div><div class="day-desc">rule_baseline.py · clinical if/else thresholds from docs/lls_mapping.md · MATE 0.82, sanity floor confirmed beatable · also reused post-hoc to label real data (label_real_data.py)</div></div><div class="status done">DONE</div></div>
 
-    <div class="day"><div class="day-num">05</div><div><div class="day-title">XGBoost Ordinal Classifier</div><div class="day-desc">xgb_ordinal.py · regression + tuned threshold binning · balanced sample weights · MATE 0.59, beats baseline on every metric</div></div><div class="status done">DONE</div></div>
+    <div class="day"><div class="day-num">05</div><div><div class="day-title">XGBoost Ordinal Classifier</div><div class="day-desc">xgb_ordinal.py · regression + tuned threshold binning · balanced sample weights · MATE 0.60 on pure-synthetic test set (retrained on blended synthetic+Harespod train data), beats baseline on every metric · selected model</div></div><div class="status done">DONE</div></div>
 
-    <div class="day"><div class="day-num">06</div><div><div class="day-title">LSTM Time-Series Model</div><div class="day-desc">lstm_model.py · 2-layer PyTorch LSTM on strided 60s raw-vitals windows · trained CPU-only (small model, no GPU needed) · MATE 0.78 -- built as the DL comparison model, XGBoost wins</div></div><div class="status done">DONE</div></div>
+    <div class="day"><div class="day-num">06</div><div><div class="day-title">LSTM Time-Series Model</div><div class="day-desc">lstm_model.py · 2-layer PyTorch LSTM on strided 60s raw-vitals windows · trained CPU-only (small model, no GPU needed) · MATE 0.70 after real-data blending (improved from 0.78 synthetic-only) -- built as the DL comparison model, XGBoost still wins</div></div><div class="status done">DONE</div></div>
 
     <div class="day"><div class="day-num">07</div><div><div class="day-title">Model Selection &amp; Save</div><div class="day-desc">predict_severity.py · compares baseline/XGBoost/LSTM on identical test set · selects XGBoost Ordinal (lowest mean-abs-tier-error) · single predict_severity() inference fn for the rest of the pipeline · 10 pytest smoke tests passing</div></div><div class="status done">DONE</div></div>
   </div>
@@ -105,7 +107,7 @@ footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); fo
   </div>
 
   <footer>
-    <span>high-altitude-medical-alert · phases v1.1 · Days 1-7 complete (2026-07-25)</span>
+    <span>high-altitude-medical-alert · phases v1.2 · Days 1-7 complete + real-data integration (2026-07-27)</span>
     <span>Claude Code: update status cells + this footer's revision note on every completed phase</span>
   </footer>
 </div>

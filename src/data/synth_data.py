@@ -246,6 +246,36 @@ def generate_dataset(
     return dataset
 
 
+def synthesize_temperature(severity_labels: pd.Series, rng: np.random.Generator) -> pd.Series:
+    """
+    Generate a plausible body-temperature column for rows that have a
+    KNOWN severity label but no real temperature sensor (Harespod and the
+    pilot altitude dataset both lack one -- see their loaders' docstrings).
+
+    This reuses TIER_PROFILES.temp_delta_range -- the exact same
+    literature-based temperature-deviation bands synth_data.py already
+    uses when GENERATING synthetic trajectories -- so a real Harespod row
+    labeled "Severe AMS" gets a temperature drawn from the same
+    distribution a synthetic "Severe AMS" row would have, rather than
+    inventing a second, inconsistent temperature model. This is explicitly
+    a fabricated/synthesized value standing in for a genuinely missing
+    sensor -- never presented as a real temperature reading -- which is
+    exactly the same "gap-filling" role synthetic temperature already
+    plays for pure-synthetic data (see CLAUDE.md Section 5's gap table).
+    """
+    temp_center = rng.uniform(*TEMP_NORMAL_RANGE)
+    values = np.empty(len(severity_labels), dtype=float)
+    for tier, profile in TIER_PROFILES.items():
+        mask = (severity_labels == tier).to_numpy()
+        n = mask.sum()
+        if n == 0:
+            continue
+        temp_delta = rng.uniform(*profile.temp_delta_range, size=n)
+        noise = rng.normal(0, 0.08, n)
+        values[mask] = temp_center + temp_delta + noise
+    return pd.Series(values, index=severity_labels.index, name="temp")
+
+
 def save_dataset(df: pd.DataFrame, filename: str = "synthetic_vitals.csv") -> None:
     SYNTHETIC_DIR.mkdir(parents=True, exist_ok=True)
     out_path = SYNTHETIC_DIR / filename

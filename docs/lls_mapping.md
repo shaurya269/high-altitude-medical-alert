@@ -46,6 +46,34 @@ actually reason about the reading.
   overfit to one "template" patient.
 - `src/models/rule_baseline.py`: encodes the same deltas/thresholds as
   explicit if/else rules — the sanity-check baseline any ML model must beat.
+- `src/data/label_real_data.py`: applies the SAME `rule_baseline.classify_row()`
+  thresholds to real, unlabeled sensor data (Harespod) post-hoc, since
+  neither real dataset available to this project includes a severity
+  assessment. This is a deliberate reuse, not a re-derivation — there is
+  exactly one place in the codebase encoding "what spo2_delta/hr_elevation/
+  trend combination means Severe AMS." See `feature_engineering.py`'s
+  `run_pipeline()` docstring for why rule-labeled real data is merged into
+  the TRAINING split only, never validation/test (using it in
+  val/test would let the rule-based baseline trivially "predict" labels
+  it generated itself).
+
+## A real-data caveat this mapping does NOT resolve: oxygen-enriched exposure
+
+This entire mapping assumes **ambient-air hypoxia** — SpO2 drops because
+the air itself has less oxygen at altitude (`config.SPO2_DROP_PER_1000M`).
+While integrating real datasets, a second candidate (the "High-Altitude
+Pilot Physiological Monitoring Dataset," `src/data/pilot_altitude_loader.py`)
+turned out to use an **oxygen-enriched** chamber protocol (~40-45% O2
+throughout, confirmed via its own O2/N2/CO2 columns) — a fundamentally
+different physiological scenario where SpO2 stays high even at extreme
+altitude because supplemental oxygen compensates for the reduced pressure.
+Applying this document's ambient-air-derived thresholds to that dataset
+would actively mislabel it (a healthy 98% SpO2 reading at 7500m would be
+flagged as severely abnormal, since ambient air at 7500m would expect
+~75%). That dataset is loaded but deliberately excluded from severity
+labeling for this reason — see `CLAUDE.md` Section 5's Decision Log.
+Harespod, by contrast, is confirmed ambient-air (per its own paper's
+Methods section) and is the dataset this mapping is actually applied to.
 
 ## Sources (general references, not a single clinical trial)
 
