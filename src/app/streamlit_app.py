@@ -25,7 +25,20 @@ effective for the demo's purpose.
 
 from __future__ import annotations
 
+import sys
 import time
+from pathlib import Path
+
+# Streamlit Cloud (and `streamlit run src/app/streamlit_app.py` from anywhere
+# other than the project root) doesn't put the project root on sys.path the
+# way running `python -m` from the root does -- without this, `from src...`
+# below fails with "ModuleNotFoundError: No module named 'src'" even though
+# every package installed correctly. Insert the project root (two levels up
+# from this file: src/app/ -> src/ -> root) before any `src.*` import, the
+# same fix the notebooks already apply via `sys.path.insert(0, ...)`.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
 import pandas as pd
 import streamlit as st
