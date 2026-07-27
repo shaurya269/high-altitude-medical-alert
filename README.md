@@ -183,6 +183,53 @@ Read this before trusting anything this system says.
 
 ---
 
+## Future improvements
+
+None of the items below are built — listed here as honest next steps, not claims. The
+Streamlit dashboard's **Roadmap** tab mirrors this list; keep both in sync if it changes.
+
+- **GPS tracking** — attach real GPS coordinates (and altitude derived from GPS/barometric
+  fusion, not just a manual slider or chamber marker) to every reading, so the dashboard and
+  alerts can show *where* a subject is, not just their vitals. Would let the Telegram alert
+  include a live location link for a real rescue response.
+- **Telegram query bot (ask the system your own vitals)** — `src/alerts/alert_bot.py` today is
+  **send-only**: it dispatches alerts but never listens for incoming messages. A real
+  improvement is an inbound listener (`python-telegram-bot`'s `Application`/`CommandHandler`,
+  e.g. `/status` or `/vitals`) so a user or their medical contact can message the bot directly
+  and get the current severity, vitals, and trend back on demand, instead of only receiving
+  alerts the hysteresis gate decides to push.
+- **Hardware integration** — everything currently runs against synthetic/replayed data behind
+  the `DataSource` interface (`src/datasource/base.py`), built specifically so a future
+  `arduino_reader.py` reading real MAX30102 (SpO2/HR) and barometric altitude sensors over
+  serial is a drop-in swap, not a rewrite. See `CLAUDE.md` Section 2A.
+- **Fixing the under-triage gap** — ~24% of test-set predictions underestimate true severity
+  (45% for the most dangerous HAPE/HACE tiers specifically). Two threshold-tuning fixes were
+  tried and reverted because they caused false alarms on genuinely normal readings (see
+  `docs/lls_mapping.md`). A real fix likely needs either a differently-trained model or a
+  second, independent confirming signal (e.g. requiring the LLM's interpretation to agree
+  before alerting).
+- **Per-subject personal baselines** — the rule baseline and current features compare against
+  a population-normal HR/SpO2 band, not an individual's own resting values. Learning (or
+  letting a user enter) a personal baseline during a calm period could sharpen sensitivity for
+  people whose normal readings sit near the edges of the population range.
+- **Wearable-grade sensor fusion** — add respiratory rate (already loaded but unused from the
+  pilot-altitude dataset, see `src/data/pilot_altitude_loader.py`) and blood pressure as
+  additional model features. Both are clinically relevant to AMS/HAPE/HACE and could improve
+  separation between adjacent tiers.
+- **Multi-user / expedition mode** — currently one `MedicalAlertPipeline` instance monitors one
+  subject. A group expedition use case would need multiple concurrent subjects, a roster view,
+  and alerts that identify *which* team member triggered them.
+- **Cloud persistence + auth** — alert logs and history currently live in a local JSONL file /
+  browser session. A real deployment would want a proper database, user accounts, and
+  historical trend views across multiple expeditions/sessions.
+- **Offline-first operation** — high-altitude expeditions often have no connectivity. A real
+  hardware phase would need the ML classification and hysteresis gate to keep working fully
+  offline, queuing Telegram alerts and LLM calls for whenever connectivity returns (both
+  already degrade gracefully to a local fallback today — this would extend that to an explicit
+  offline queue/retry mechanism).
+
+---
+
 ## Project structure
 
 ```

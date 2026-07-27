@@ -122,3 +122,62 @@ def test_manual_sliders_mode_starts_without_error():
     start_button.click().run(timeout=30)
     assert not at.exception
     assert len(at.sidebar.slider) == 4  # SpO2, HR, temp, altitude
+
+
+def test_system_info_and_roadmap_tabs_render_without_error():
+    """The two static-content tabs (architecture/thresholds/severity-tier
+    explanations, and the future-improvements roadmap) don't touch the
+    pipeline at all -- just confirm the app still loads cleanly with them
+    wired into main()'s st.tabs() call."""
+    at = AppTest.from_file(APP_PATH)
+    at.run(timeout=30)
+    assert not at.exception
+    subheader_text = " ".join(s.value for s in at.subheader)
+    assert "System architecture" in subheader_text
+    assert "Future improvements" in subheader_text
+
+
+def test_alert_popup_fires_exactly_once_per_new_alert():
+    """Regression test for the ALERT! popup (render_alert_popup() /
+    _show_alert_dialog()): drive severity into HACE-risk territory via the
+    deterministic manual sliders (no random seed dependency, unlike the
+    scenario player), long enough to sustain the hysteresis gate's
+    3-consecutive-reading requirement, and confirm pending_alert gets set
+    then consumed (cleared back to None) on the next rerun -- exactly once,
+    not left dangling to re-show the same alert on an unrelated later rerun."""
+    at = AppTest.from_file(APP_PATH)
+    at.run(timeout=30)
+
+    manual_radio = at.sidebar.radio[0]
+    manual_radio.set_value("Manual sliders").run(timeout=30)
+    start_button = next(b for b in at.sidebar.button if b.label == "Start manual override")
+    start_button.click().run(timeout=30)
+
+    assert at.session_state["pending_alert"] is None
+
+    # Push every slider well into HACE-risk territory: severe SpO2 deviation
+    # + strongly elevated HR (see docs/lls_mapping.md's tier table).
+    spo2_slider = next(s for s in at.sidebar.slider if s.label == "SpO2 (%)")
+    hr_slider = next(s for s in at.sidebar.slider if s.label == "Heart rate (bpm)")
+    altitude_slider = next(s for s in at.sidebar.slider if s.label == "Altitude (m)")
+    altitude_slider.set_value(4500.0).run(timeout=30)
+    spo2_slider = next(s for s in at.sidebar.slider if s.label == "SpO2 (%)")
+    spo2_slider.set_value(62.0).run(timeout=30)
+    hr_slider = next(s for s in at.sidebar.slider if s.label == "Heart rate (bpm)")
+    hr_slider.set_value(150.0).run(timeout=30)
+
+    step_button = next(b for b in at.sidebar.button if b.label == "Step forward")
+    alert_seen = False
+    for _ in range(120):  # 60 to clear min_readings_for_classification, then a consecutive streak
+        step_button = next(b for b in at.sidebar.button if b.label == "Step forward")
+        step_button.click().run(timeout=30)
+        assert not at.exception
+        if at.session_state["pending_alert"] is not None:
+            alert_seen = True
+            break
+
+    assert alert_seen, "sustained extreme vitals should eventually fire the hysteresis gate"
+
+    # One more rerun (equivalent to render_alert_popup() consuming it): must clear back to None.
+    at.run(timeout=30)
+    assert at.session_state["pending_alert"] is None
