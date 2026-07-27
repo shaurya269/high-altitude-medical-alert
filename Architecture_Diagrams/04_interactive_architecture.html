@@ -1,0 +1,1112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>High-Altitude Medical Alert System — Interactive Architecture</title>
+<style>
+  :root {
+    --ground: #0B1520;
+    --panel: #101E2E;
+    --panel-2: #0D1926;
+    --ink: #EDF2F7;
+    --muted: #8FA3B8;
+    --faint: #54677D;
+    --oxygen: #2FB8A6;
+    --oxygen-bg: #0E2A26;
+    --alert: #E8583D;
+    --alert-bg: #2E1712;
+    --warn: #E8A23D;
+    --warn-bg: #2E2110;
+    --cool: #5B8DEF;
+    --cool-bg: #16223B;
+    --purple: #9B7FE8;
+    --purple-bg: #211A38;
+    --line: rgba(143,163,184,0.16);
+    --line-strong: rgba(143,163,184,0.30);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    --font-display: "IBM Plex Sans", "Segoe UI", sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", "Cascadia Code", "Consolas", ui-monospace, monospace;
+  }
+  :root[data-theme="light"] {
+    --ground: #F4F3EE; --panel: #FFFFFF; --panel-2: #FAF9F5;
+    --ink: #191D24; --muted: #5A6473; --faint: #8A93A2;
+    --oxygen: #1F9E88; --oxygen-bg: #E6F6F1;
+    --alert: #C8362A; --alert-bg: #FBE7E4;
+    --warn: #B9860F; --warn-bg: #FBF2DF;
+    --cool: #4A6FC0; --cool-bg: #EAF0FB;
+    --purple: #8261CC; --purple-bg: #F1ECFB;
+    --line: #E2E0D7; --line-strong: #CBC9BE;
+    --shadow: 0 1px 2px rgba(24,28,36,.05), 0 8px 24px rgba(24,28,36,.06);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground: #F4F3EE; --panel: #FFFFFF; --panel-2: #FAF9F5;
+      --ink: #191D24; --muted: #5A6473; --faint: #8A93A2;
+      --oxygen: #1F9E88; --oxygen-bg: #E6F6F1;
+      --alert: #C8362A; --alert-bg: #FBE7E4;
+      --warn: #B9860F; --warn-bg: #FBF2DF;
+      --cool: #4A6FC0; --cool-bg: #EAF0FB;
+      --purple: #8261CC; --purple-bg: #F1ECFB;
+      --line: #E2E0D7; --line-strong: #CBC9BE;
+      --shadow: 0 1px 2px rgba(24,28,36,.05), 0 8px 24px rgba(24,28,36,.06);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--font-body); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  a { color: inherit; }
+
+  .topbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 16px; padding: 14px 26px;
+    background: color-mix(in srgb, var(--ground) 86%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; gap: 10px; cursor: pointer; user-select: none; }
+  .brand .logo { font-family: var(--font-display); font-weight: 700; font-size: 20px; letter-spacing: 0.3px; line-height: 1; position: relative; }
+  .brand .logo::after { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 3px; background: var(--alert); border-radius: 2px; }
+  .brand .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--faint); font-weight: 600; }
+  .crumbs { flex: 1; font-size: 13px; color: var(--muted); min-width: 160px; }
+  .crumbs b { color: var(--ink); font-weight: 600; }
+  .topbtn { border: 1px solid var(--line-strong); background: var(--panel); color: var(--muted); border-radius: 8px; padding: 7px 12px;
+    font-size: 12.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+  .topbtn:hover { color: var(--ink); border-color: var(--alert); }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 26px 100px; }
+  .hero { padding: 26px 0 8px; }
+  .hero h1 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.5px; font-size: clamp(32px, 5.5vw, 52px); line-height: 1.04; margin: 0 0 10px; text-wrap: balance; }
+  .hero h1 .rd { color: var(--alert); }
+  .hero p.lede { font-size: 16px; color: var(--muted); max-width: 72ch; margin: 0; }
+  .hint { margin-top: 18px; font-size: 13px; color: var(--faint); display: inline-flex; align-items: center; gap: 8px; }
+  .hint .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--alert); animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:.35; transform:scale(.8)} 50%{opacity:1; transform:scale(1.15)} }
+  .disclaimer { margin-top: 16px; padding: 10px 14px; background: var(--warn-bg); border: 1px solid var(--warn); border-radius: 8px; font-size: 12.5px; color: var(--warn); }
+
+  .navtabs { display: flex; gap: 8px; margin: 24px 0 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+  .navtab { border: none; background: none; color: var(--muted); font-family: inherit; font-size: 13.5px; font-weight: 600; padding: 10px 6px; cursor: pointer; border-bottom: 2px solid transparent; }
+  .navtab:hover { color: var(--ink); }
+  .navtab.active { color: var(--alert); border-bottom-color: var(--alert); }
+  .tabpage { display: none; }
+  .tabpage.active { display: block; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px);} to {opacity:1; transform:none;} }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 22px 0 8px; }
+  .legend .li { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+  .legend .sw { width: 12px; height: 12px; border-radius: 3px; }
+
+  .layer { margin-top: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); overflow: hidden; }
+  .layer-head { display: flex; align-items: center; gap: 12px; padding: 13px 18px; border-bottom: 1px solid var(--line); background: var(--lbg, var(--panel-2)); flex-wrap: wrap; }
+  .layer-tag { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: #fff; background: var(--lc, var(--alert)); padding: 3px 8px; border-radius: 6px; letter-spacing: .5px; }
+  .layer-name { font-weight: 700; font-size: 15px; }
+  .layer-role { color: var(--muted); font-size: 13px; margin-left: auto; text-align: right; }
+  .comp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; padding: 16px; }
+  .comp { text-align: left; cursor: pointer; border: 1px solid var(--line); border-left: 3px solid var(--lc, var(--alert)); background: var(--panel-2);
+    border-radius: 11px; padding: 13px 14px; display: flex; flex-direction: column; gap: 5px; transition: transform .13s ease, box-shadow .13s ease, border-color .13s; font-family: inherit; }
+  .comp:hover { transform: translateY(-3px); box-shadow: var(--shadow); border-color: var(--lc); }
+  .comp .ic { font-size: 18px; }
+  .comp .cn { font-weight: 700; font-size: 14px; }
+  .comp .ct { font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .comp .tool { margin-top: 4px; font-family: var(--font-mono); font-size: 10.5px; color: var(--lc, var(--alert)); font-weight: 600; letter-spacing: .3px; }
+
+  .flowbar { display: flex; justify-content: center; padding: 3px 0; }
+
+  .detail { display: none; }
+  .detail.active { display: block; animation: fade .25s ease; }
+  .map.hidden { display: none; }
+  .back { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: none; border: none; color: var(--muted); font-weight: 600; font-size: 13.5px; padding: 4px 0; margin-bottom: 6px; font-family: inherit; }
+  .back:hover { color: var(--alert); }
+  .dhead { display: flex; align-items: flex-start; gap: 16px; margin: 6px 0 8px; flex-wrap: wrap; }
+  .dhead .dic { width: 58px; height: 58px; flex: none; border-radius: 14px; display: grid; place-items: center; font-size: 28px; background: var(--lbg); border: 1px solid var(--lc); }
+  .dhead h2 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.3px; font-size: clamp(26px, 4vw, 38px); margin: 2px 0 4px; line-height: 1.05; }
+  .dhead .dsub { color: var(--muted); font-size: 15px; max-width: 60ch; }
+  .dhead .dtool { display: inline-block; margin-top: 8px; font-family: var(--font-mono); font-size: 12px; color: #fff; background: var(--lc); padding: 3px 9px; border-radius: 6px; }
+
+  .dcols { display: grid; grid-template-columns: 1fr; gap: 22px; margin-top: 22px; }
+  @media (min-width: 860px) { .dcols { grid-template-columns: 1.05fr .95fr; } }
+  .card { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); padding: 20px 22px; margin-bottom: 18px; }
+  .card h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--faint); margin: 0 0 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .card h3::before { content: ""; width: 14px; height: 2px; background: var(--lc, var(--alert)); }
+  .card p { margin: 0 0 12px; font-size: 14.5px; color: var(--ink); }
+  .card p:last-child { margin-bottom: 0; }
+  .card .q { color: var(--muted); font-size: 14px; }
+  .card strong { color: var(--ink); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13.5px; }
+  .kv dt { color: var(--faint); font-weight: 600; font-family: var(--font-mono); font-size: 12px; }
+  .kv dd { margin: 0; color: var(--ink); }
+  code, .mono { font-family: var(--font-mono); font-size: 12.5px; background: var(--panel-2); padding: 1.5px 6px; border-radius: 5px; border: 1px solid var(--line); }
+  ul.clean { margin: 0; padding-left: 18px; font-size: 14px; color: var(--ink); }
+  ul.clean li { margin-bottom: 7px; }
+  ul.clean li::marker { color: var(--lc, var(--alert)); }
+
+  .figure { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); padding: 16px; }
+  @media (min-width: 860px) { .figure { position: sticky; top: 78px; max-height: calc(100vh - 94px); overflow-y: auto; } }
+  .figure .ftitle { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--faint); font-weight: 700; margin-bottom: 4px; }
+  .figure .fnote { font-size: 12.5px; color: var(--muted); min-height: 34px; margin-top: 10px; }
+  .figstage { width: 100%; }
+  .btnrow { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .fbtn { border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--ink); border-radius: 8px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .fbtn:hover { border-color: var(--alert); }
+  .fbtn.primary { background: var(--alert); color: #fff; border-color: var(--alert); }
+
+  .related { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+  .chip { cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600; border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--muted); padding: 6px 11px; border-radius: 20px; }
+  .chip:hover { color: var(--alert); border-color: var(--alert); }
+
+  /* dataset + glossary tabs */
+  .ds-section { margin-top: 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); padding: 24px 26px; }
+  .ds-section h2 { font-family: var(--font-display); font-size: 24px; margin: 0 0 6px; }
+  .ds-section .subtitle { color: var(--muted); font-size: 14px; margin-bottom: 18px; max-width: 80ch; }
+  .ds-section h3 { font-size: 16px; margin: 26px 0 10px; color: var(--ink); }
+  .ds-section h3:first-of-type { margin-top: 6px; }
+  .table-wrap { overflow-x: auto; margin: 12px 0 20px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--faint); font-weight: 700; border-bottom: 1px solid var(--line-strong); }
+  td.mono, th.mono { font-family: var(--font-mono); font-size: 12.5px; }
+  tr.bugrow td { background: var(--alert-bg); }
+  tr.fixrow td { background: var(--oxygen-bg); }
+
+  .callout { margin: 16px 0; padding: 14px 18px; border-radius: 10px; border-left: 3px solid var(--warn); background: var(--warn-bg); font-size: 13.5px; color: var(--ink); }
+  .callout.bug { border-left-color: var(--alert); background: var(--alert-bg); }
+  .callout.fix { border-left-color: var(--oxygen); background: var(--oxygen-bg); }
+  .callout.decision { border-left-color: var(--cool); background: var(--cool-bg); }
+  .callout b { display: block; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; }
+
+  /* glossary */
+  .glossary-search { width: 100%; max-width: 420px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-strong);
+    background: var(--panel-2); color: var(--ink); font-family: inherit; font-size: 14px; margin-bottom: 18px; }
+  .glossary-search:focus { outline: none; border-color: var(--alert); }
+  .gloss-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  .gloss-card { border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); padding: 15px 17px; }
+  .gloss-card h4 { margin: 0 0 6px; font-size: 14.5px; color: var(--alert); display: flex; align-items: center; gap: 8px; }
+  .gloss-card .cat { font-size: 9.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--faint); background: var(--panel); border: 1px solid var(--line); padding: 2px 6px; border-radius: 20px; }
+  .gloss-card p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .gloss-card p code { font-size: 11.5px; }
+
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand" onclick="showMap()">
+    <span class="logo">🏔 ALTITUDE ALERT</span>
+    <span class="kicker">Architecture Explorer</span>
+  </div>
+  <div class="crumbs" id="crumbs"><b>System map</b> — click any component</div>
+  <button class="topbtn" onclick="location.href='01_system_architecture.html'">Static diagram ↗</button>
+  <button class="topbtn" onclick="location.href='05_interactive_dataflow.html'">Data flow →</button>
+  <button class="topbtn" id="themeBtn" onclick="toggleTheme()">◐ Theme</button>
+</div>
+
+<div class="wrap map" id="mapView">
+  <div class="hero">
+    <h1>How the <span class="rd">High-Altitude Medical Alert System</span> is built</h1>
+    <p class="lede">A sensor-to-alert pipeline: synthetic + real vitals data, an ordinal XGBoost severity
+      classifier, a guardrailed LLM interpretation/chat layer, a hysteresis-gated Telegram bot, and a
+      Streamlit dashboard — all running in Demo Mode against synthetic and replayed data, no physical
+      hardware required. Every box below is clickable.</p>
+    <div class="hint"><span class="dot"></span> Tap a component to open a full explainer with an interactive diagram.</div>
+    <div class="disclaimer">⚠ Prototype / learning project — not a certified medical device. Severity tiers are a literature-derived approximation, not a clinical diagnosis.</div>
+  </div>
+
+  <div class="navtabs" id="navtabs">
+    <button class="navtab active" data-tab="components" onclick="switchTab('components')">Components</button>
+    <button class="navtab" data-tab="dataset" onclick="switchTab('dataset')">Dataset &amp; Decisions</button>
+    <button class="navtab" data-tab="glossary" onclick="switchTab('glossary')">Glossary</button>
+  </div>
+
+  <div class="tabpage active" id="tab-components">
+    <div class="legend" id="legend"></div>
+    <div id="layers"></div>
+  </div>
+
+  <div class="tabpage" id="tab-dataset"></div>
+  <div class="tabpage" id="tab-glossary"></div>
+
+  <div class="footer">
+    <span>High-Altitude Medical Alert System — ordinal XGBoost severity classification + LLM reasoning + Telegram alerts.</span>
+    <span>Interactive companion to <code>01_system_architecture.html</code></span>
+  </div>
+</div>
+
+<div class="wrap detail" id="detailView"></div>
+
+<script>
+/* ============================================================ *
+ *  DATA: layers + components                                    *
+ * ============================================================ */
+const LAYERS = [
+  { id:"l1", tag:"L1", name:"Data", role:"Synthetic + real vitals, feature engineering", comps:["synth","harespod","pilot","features"] },
+  { id:"l2", tag:"L2", name:"ML Models", role:"Three severity classifiers, compared honestly", comps:["baseline","xgboost","lstm","metrics"] },
+  { id:"l3", tag:"L3", name:"Demo Mode / DataSource", role:"Swappable live-reading sources, no hardware needed", comps:["datasource","scenario","manual","replay","buffer"] },
+  { id:"l4", tag:"L4", name:"LLM Layer", role:"Interpret, chat, generate structured alerts — guardrailed", comps:["groq","prompt","chat"] },
+  { id:"l5", tag:"L5", name:"Alerts & Pipeline", role:"Decide when to alert, and wire everything together", comps:["hysteresis","telegram","pipeline"] },
+  { id:"l6", tag:"L6", name:"Dashboard", role:"The one thing a user actually sees", comps:["streamlit"] },
+];
+
+const C = {
+  synth: {
+    ic:"🧬", name:"Synthetic Data Generator", layer:"l1", tool:"src/data/synth_data.py",
+    sub:"400 simulated subjects across 5 severity tiers, with gradual (not instant) onset.",
+    what:"The <strong>primary</strong> training dataset (not just a gap-filler). For each of 5 severity tiers (Normal, Mild AMS, Severe AMS, HAPE risk, HACE risk), it generates a full 90-minute vitals trajectory: SpO2, heart rate, temperature, and altitude, at 1Hz.",
+    how:"Every trajectory follows a <strong>sigmoid onset curve</strong>, not a step function — symptoms ramp in gradually over minutes, because a model trained on instant jumps would learn to detect abrupt discontinuities, not the gradual real-world deterioration this system needs to catch. Tier prevalence is deliberately imbalanced (Normal 55%, down to HACE risk 4%) to mirror real-world class imbalance rather than hide it.",
+    role_:"Feeds directly into <code>feature_engineering.py</code>, which computes trend features and splits subjects into train/val/test. Also reused directly by the Day 8 <code>ScenarioDataSource</code> for the Demo Mode scenario player — the demo and the training data are generated by literally the same function.",
+    why:"Harespod (below) requires a manual download and has real-world gaps (no temperature sensor, no HAPE/HACE cases — you can't ethically induce those). Building the whole pipeline against synthetic data first meant nothing blocked on that download.",
+    fig:"onset", related:["harespod","features","scenario"],
+    kv:{ "Subjects":"400", "Duration":"90 min/subject @ 1Hz", "Tiers":"5 (ordinal)", "Onset shape":"sigmoid, not step", "Normal prevalence":"55%" }
+  },
+  harespod: {
+    ic:"🫁", name:"Harespod (Real Data)", layer:"l1", tool:"src/data/harespod_loader.py",
+    sub:"15 real subjects, hypobaric chamber, ambient air — merged into training only.",
+    what:"A real, published dataset: 15 subjects breathing ambient (pressure-reduced, not oxygen-enriched) air in a hypobaric chamber, ramped through 1500-4000m stages while SpO2, heart rate, and pulse rate were recorded.",
+    how:"Two real bugs were found and fixed while integrating this: (1) the raw signals are min-max normalized per subject with the true scale unrecoverable — rescaling onto the device's raw collection range produced an implausible 174bpm average resting heart rate, fixed by rescaling onto a physiologically-plausible range instead; (2) 6 of 15 subjects had their altitude timestamp markers offset exactly 8 hours from their vitals data (a documented GMT/local-time mismatch in the files) — unfixed, this silently produced a <em>constant</em> altitude for the whole recording instead of a real ascent.",
+    role_:"Loaded, rule-labeled post-hoc (it has no severity labels of its own), and merged into the <strong>training split only</strong> — never validation/test, since its labels come from the same rule-based thresholds used as one of the models being compared, which would make evaluating that baseline circular.",
+    why:"Real sensor noise and real physiology add signal synthetic data alone can't — both XGBoost and the LSTM measurably improved after this data was blended in.",
+    fig:"gmtfix", related:["synth","pilot","replay"],
+    kv:{ "Subjects":"15", "Protocol":"Ambient air (confirmed via paper)", "Altitude range":"1500-4000m", "Native rate":"100Hz → downsampled to 1Hz", "Used in":"training split only" }
+  },
+  pilot: {
+    ic:"✈️", name:"Pilot Altitude Dataset", layer:"l1", tool:"src/data/pilot_altitude_loader.py",
+    sub:"Investigated, loaded — but excluded from labeling. A real dead end, kept visible.",
+    what:"A 2026 dataset from 20 pilots monitored across 4500-7500m simulated altitude, with real absolute-unit SpO2/HR values (confirmed directly from the raw CSVs — no rescaling ambiguity, unlike Harespod).",
+    how:"Looked like a strictly better real-data source until labeling it produced physiologically backwards results: a healthy 98% SpO2 reading at 7500m was flagged as severely abnormal. Investigating the dataset's own O2/N2/CO2 gas-composition columns revealed the subjects breathed <strong>oxygen-enriched air (~40-45% O2) throughout</strong> — a fundamentally different scenario than the ambient-air hypoxia this project models.",
+    role_:"Kept loaded and available for exploration (e.g. comparing recovery-curve shapes), but deliberately <strong>excluded</strong> from severity labeling and training — labeling it with ambient-air thresholds would have actively mislabeled it, not just approximated it.",
+    why:"A genuine example of investigating a promising lead thoroughly and correctly ruling it out, rather than either silently using bad data or silently giving up without checking.",
+    fig:"oxygen", related:["harespod","synth"],
+    kv:{ "Subjects":"20", "Altitude range":"4500-7500m", "Units":"Real, absolute (verified)", "Protocol":"Oxygen-enriched (~40-45% O2)", "Used in":"exploration only, NOT labeling" }
+  },
+  features: {
+    ic:"📈", name:"Feature Engineering", layer:"l1", tool:"src/data/feature_engineering.py",
+    sub:"Raw vitals → trend features the models actually train on.",
+    what:"Turns a raw per-second vitals stream into 5 engineered features: <code>spo2_trend_5min</code>, <code>hr_trend_5min</code>, <code>ascent_rate</code>, <code>spo2_delta</code> (deviation from altitude-expected SpO2), and <code>time_at_altitude_min</code>.",
+    how:"Computed via a rolling window over a trailing buffer, vectorized (not a slow per-row Python loop) for real performance at scale. Also owns the <strong>temporal, tier-stratified train/val/test split</strong> — subjects are grouped by severity tier first, then split chronologically within each tier, specifically to guarantee every tier appears in every split even with only a handful of rare-tier subjects.",
+    role_:"The exact same functions run at both training time and live-inference time (Stage 3 of the pipeline), so training and serving can never silently drift into two different feature definitions.",
+    why:"<code>spo2_delta</code> and <code>time_at_altitude_min</code> turned out to be the two most important features to every model trained on them — exactly what the clinical rationale in <code>docs/lls_mapping.md</code> predicts.",
+    fig:"split", related:["synth","harespod","xgboost"],
+    kv:{ "Features":"5 engineered + 4 raw", "Split method":"temporal, tier-stratified", "Train/Val/Test":"70/15/15", "Real data added to":"train only" }
+  },
+
+  baseline: {
+    ic:"📏", name:"Rule-Based Baseline", layer:"l2", tool:"src/models/rule_baseline.py",
+    sub:"The sanity floor every ML model must clearly beat.",
+    what:"Hand-written if/else thresholds, directly encoding the clinical reasoning in <code>docs/lls_mapping.md</code> — no learned parameters at all.",
+    how:"Cascades from most to least severe: very large SpO2 deviation (or a moderate deviation with a steep negative trend) → HAPE/HACE risk territory; then Severe AMS, Mild AMS, Normal. Also reused directly to <strong>label</strong> the real (Harespod) data post-hoc, since that data has no severity labels of its own.",
+    role_:"Exists purely as a floor. If a sophisticated model can't clearly beat this, that signals a real problem with the features or labels, not evidence the ML approach doesn't work.",
+    why:"F1 0.285, Mean Abs Tier Error 0.819 — both ML models beat it clearly, confirming there's real learnable signal beyond hand-written rules.",
+    fig:"bench", related:["harespod","xgboost","metrics"],
+    kv:{ "Type":"if/else rules", "Learned params":"0", "F1 (macro)":"0.285", "Mean Abs Tier Error":"0.819", "Also used for":"labeling real data" }
+  },
+  xgboost: {
+    ic:"🌳", name:"XGBoost Ordinal", layer:"l2", tool:"src/models/xgb_ordinal.py",
+    sub:"The selected model — trained as a REGRESSOR, not a plain classifier.",
+    what:"Trained to regress the severity index as a continuous number (0.0-4.0), not classify into 5 unordered categories. A prediction of 3.7 for a true HACE-risk (4) case is a small loss; a prediction of 0.2 is a big one — the loss function itself understands tier ordering, which plain multi-class classification would throw away.",
+    how:"The continuous output is converted to a discrete tier via 4 threshold cut-points, tuned on the validation set (not naive rounding) to minimize mean absolute tier error. Class-imbalance is handled with balanced sample weights, computed from the training split only.",
+    role_:"The <strong>selected model</strong> — the one <code>predict_severity()</code> actually calls in the live pipeline. Feature importances confirm it leans on <code>spo2_delta</code> and <code>time_at_altitude_min</code> most heavily, matching clinical intuition rather than a spurious correlation.",
+    why:"Won on Mean Absolute Tier Error (0.604) against both the baseline (0.819) and the LSTM (0.701) — the metric that best reflects real clinical cost, since it penalizes being 'many tiers wrong' far more than 'one tier wrong.'",
+    fig:"ordinal", related:["baseline","lstm","features","hysteresis"],
+    kv:{ "Approach":"Regression + tuned thresholds", "Selected?":"Yes", "Mean Abs Tier Error":"0.604", "Under-triage rate":"24.4%", "Top feature":"spo2_delta" }
+  },
+  lstm: {
+    ic:"🔁", name:"LSTM Comparison Model", layer:"l2", tool:"src/models/lstm_model.py",
+    sub:"A small 2-layer PyTorch LSTM — built to demonstrate the DL alternative honestly.",
+    what:"Trained on raw 60-second rolling windows of vitals (spo2, hr, temp, altitude) — NOT the hand-engineered trend features XGBoost sees. The idea being tested: can a recurrent network learn its own notion of 'trend' directly from a raw sequence, rather than needing a human to compute it as a feature?",
+    how:"Deliberately small (2 layers, modest hidden size) — this is a learning comparison, not a bid for maximum performance. Classifies directly into 5 classes with cross-entropy loss (a genuinely different strategy from XGBoost's ordinal regression), with class-balanced loss weighting for the same imbalance reason.",
+    role_:"Built and compared honestly, not built to lose — but its Mean Absolute Tier Error (0.701) was clearly worse than XGBoost's (0.604), so XGBoost was selected as the production model.",
+    why:"The comparison is itself informative: XGBoost's regression-based ordinal-awareness measurably outperformed the LSTM's raw-sequence approach on THIS dataset size and shape — a real, evidence-based conclusion, not an assumption.",
+    fig:"lstmwin", related:["xgboost","features"],
+    kv:{ "Framework":"PyTorch", "Input":"raw 60s windows", "Layers":"2 (small, by design)", "Mean Abs Tier Error":"0.701", "Selected?":"No — XGBoost won" }
+  },
+  metrics: {
+    ic:"📐", name:"Shared Metrics", layer:"l2", tool:"src/models/metrics.py",
+    sub:"Every model scored with literally the same code — no drift between comparisons.",
+    what:"One evaluation function used by the baseline, XGBoost, and the LSTM alike, computing precision/recall/F1 (macro-averaged, so the rare dangerous tiers can't be masked by the abundant Normal tier), plus two ordinal-specific metrics: Mean Absolute Tier Error and under-triage rate.",
+    how:"<strong>Mean Absolute Tier Error</strong> is the average |predicted tier − true tier| — 0 is perfect, higher means predictions are typically further off. <strong>Under-triage rate</strong> is the fraction of predictions that underestimate true severity — the clinically dangerous direction of error, tracked explicitly rather than hidden inside an aggregate accuracy number.",
+    role_:"This is what made the Day 13 under-triage finding possible to even notice — a plain accuracy number would never have surfaced that 45% of true HAPE/HACE cases predicted below the alert-eligible tier.",
+    why:"Macro-averaging specifically: a model that nails Normal (the dominant class) and ignores HACE risk would still score well on micro/weighted metrics — macro-averaging forces the rare, dangerous classes to count equally.",
+    fig:"asymmetry", related:["baseline","xgboost","lstm"],
+    kv:{ "Precision/Recall/F1":"macro-averaged", "Ordinal metric":"Mean Abs Tier Error", "Safety metric":"under-triage rate", "Used by":"all 3 models identically" }
+  },
+
+  datasource: {
+    ic:"🔌", name:"DataSource Interface", layer:"l3", tool:"src/datasource/base.py",
+    sub:"Two methods only: .next_reading() and .reset(). Everything else builds on this.",
+    what:"An abstract interface every reading source implements — the scenario player, manual sliders, Harespod replay, and (in a future, not-yet-built hardware phase) a real Arduino reader.",
+    how:"Deliberately minimal: <code>next_reading()</code> returns the next reading or None if exhausted; <code>reset()</code> rewinds. No source-specific logic ever leaks into the rest of the pipeline — <code>MedicalAlertPipeline</code> only ever calls these two methods, never anything specific to one implementation.",
+    role_:"This is what makes a future real-hardware phase a drop-in swap rather than a rewrite — CLAUDE.md's explicit, standing instruction: 'always go through the DataSource interface.'",
+    why:"Without this abstraction, adding a 4th data source (or eventually real hardware) would mean touching every downstream module. With it, it means writing one new file.",
+    fig:"interface", related:["scenario","manual","replay","pipeline"],
+    kv:{ "Methods":"next_reading(), reset()", "Implementations":"3 (scenario, manual, replay)", "Future 4th":"arduino_reader.py (not built)", "Reading shape":"timestamp, spo2, hr, temp, altitude" }
+  },
+  scenario: {
+    ic:"🎬", name:"Scenario Player", layer:"l3", tool:"src/datasource/scenario_player.py",
+    sub:"Pick a tier, watch a full trajectory play forward in real time.",
+    what:"Plays one of the 5 severity scenarios (Normal, Mild AMS, Severe AMS, HAPE onset, HACE risk) forward one reading at a time, for the Demo Mode 'pick a scenario' panel.",
+    how:"Directly reuses <code>synth_data.simulate_trajectory()</code> — the exact same function that generates training data — rather than a second, simplified trajectory generator. The whole trajectory is generated once at construction (not regenerated per reading) so a Streamlit rerun doesn't silently produce a different random scenario mid-playback.",
+    role_:"The main way a user explores 'what does the system do during a Severe AMS episode' without needing real hardware or a real dataset.",
+    why:"Because it's the SAME generator as training data, what you see in the demo genuinely resembles what the model was trained to recognize — not a separately-hand-tuned demo experience.",
+    fig:"onset", related:["synth","datasource","streamlit"],
+    kv:{ "Scenarios":"5 (matching severity tiers)", "Generator":"reuses synth_data.py", "Duration":"configurable, default 90 min", "Seed":"random by default, settable" }
+  },
+  manual: {
+    ic:"🎚️", name:"Manual Override", layer:"l3", tool:"src/datasource/manual_override.py",
+    sub:"Drag sliders, watch the classification react live — for exploring edge cases.",
+    what:"Lets a user directly set SpO2, heart rate, temperature, and altitude via sliders and see the ML classification + LLM interpretation update.",
+    how:"Unlike the scenario player, this source has no pre-generated trajectory — every <code>next_reading()</code> call just returns whatever the sliders are currently set to, with the timestamp advancing. This still satisfies the DataSource contract, so the rest of the pipeline never needs to know this source works differently internally.",
+    role_:"Useful specifically for exploring boundary cases — e.g. 'what does the system say at exactly 85% SpO2, 4000m?' — that a smooth trajectory generator might never happen to produce.",
+    why:"This is exactly what was used during Day 13 edge-case testing (oscillating readings, step-function drops) — hand-crafted sequences a generator wouldn't produce naturally.",
+    fig:"manual", related:["datasource","pipeline"],
+    kv:{ "Controls":"4 sliders (SpO2, HR, temp, altitude)", "Defaults":"96%, 75bpm, 36.8°C, 2000m", "Update model":"set_values(), partial updates OK" }
+  },
+  replay: {
+    ic:"⏮️", name:"Harespod Replay", layer:"l3", tool:"src/datasource/harespod_replay.py",
+    sub:"Replay a real recording end to end through the exact same pipeline.",
+    what:"Steps through one real Harespod subject's actual recorded vitals, one reading at a time — letting the demo show the exact same classification/hysteresis/LLM/alert pipeline responding to genuinely real sensor data.",
+    how:"Reuses <code>harespod_loader.py</code>'s already-fixed rescaling and altitude-interpolation logic. Since Harespod has no temperature sensor, a neutral (non-severity-conditioned) temperature is synthesized per reading — different from the training-time synthesis, which DOES condition on a known label, since here there's no label to condition on (the whole point is watching the pipeline compute one).",
+    role_:"All 15 real recordings were replayed through the complete pipeline during Day 13 testing: zero exceptions, zero rejected readings, each correctly de-duplicated to exactly one alert despite hundreds of consecutive elevated readings.",
+    why:"Demonstrates the system on real, imperfect, noisy sensor data — not just clean synthetic trajectories — which is a meaningfully different and more convincing demo than the scenario player alone.",
+    fig:"replay15", related:["harespod","datasource","pipeline"],
+    kv:{ "Subjects available":"15", "Source":"harespod_loader.py", "Temp handling":"neutral synthesis (no label to condition on)", "Day 13 result":"0 exceptions across all 15" }
+  },
+  buffer: {
+    ic:"🪣", name:"Reading Buffer", layer:"l3", tool:"src/datasource/buffer.py",
+    sub:"Stage 2: the rolling window + glitch filter between any source and the models.",
+    what:"Holds the trailing 10 minutes of readings and validates every new one against physiologically-impossible bounds (e.g. SpO2 must be 0-100%) before it ever reaches feature engineering or a trained model.",
+    how:"Uses a <code>deque(maxlen=...)</code> so old readings automatically drop off as new ones arrive — genuinely rolling, not manually trimmed. Rejects out-of-range readings without raising, just incrementing a counter — an occasional glitch is expected and tolerable, not exceptional.",
+    role_:"Every DataSource funnels through exactly one of these before feature engineering — the single place validation logic exists, regardless of which source produced the reading.",
+    why:"Verified directly: a synthetic -999% SpO2 glitch injected mid-stream was correctly rejected with zero crash, during Day 13 edge-case testing.",
+    fig:"bufferfig", related:["datasource","features","pipeline"],
+    kv:{ "Window":"10 minutes, rolling", "Validates":"SpO2, HR, temp, altitude ranges", "On glitch":"reject silently, count it", "Backing structure":"collections.deque" }
+  },
+
+  groq: {
+    ic:"🧠", name:"Groq LLM (Llama 3.3 70B)", layer:"l4", tool:"src/llm/llm_chat.py",
+    sub:"Interprets severity, holds live chat, generates structured alert JSON.",
+    what:"Three functions built on one shared guardrailed system prompt: <code>explain_severity()</code> (plain-language interpretation), <code>chat()</code> (live Q&amp;A), and <code>generate_alert_content()</code> (structured JSON specifically for Telegram alerts).",
+    how:"Chosen for Groq's free tier and fast inference. The ML model's severity classification is ALWAYS passed in as ground-truth context — the LLM explains it, it never invents its own assessment from raw numbers. <code>generate_alert_content()</code> uses Groq's JSON response-format mode so the alert is guaranteed machine-parseable, never free text that might omit a required field.",
+    role_:"Interpretation is cached per severity-<em>tier-change</em>, not called on every single tick — calling it every second in a live 1Hz loop would be impractical for cost, latency, and free-tier rate limits, a real gap found and fixed during Day 11 testing.",
+    why:"Verified live against real user pressure: a message insisting the user felt fine despite an elevated classification, and directly asking for a medication dose, was correctly refused on both counts.",
+    fig:"llmflow", related:["prompt","chat","hysteresis"],
+    kv:{ "Model":"Llama 3.3 70B via Groq", "Functions":"explain, chat, generate_alert_content", "Call frequency":"per tier-change, not per tick", "No key?":"templated fallback, same guardrails" }
+  },
+  prompt: {
+    ic:"🛡️", name:"Guardrailed System Prompt", layer:"l4", tool:"src/llm/prompts/system_prompt.py",
+    sub:"Four non-negotiable rules, stated explicitly — not left to the model's judgment.",
+    what:"One shared prompt text used by every LLM call in the project, encoding CLAUDE.md's four non-negotiable rules explicitly in writing, rather than relying on the model to infer them.",
+    how:"<strong>Never</strong> present itself as making a medical diagnosis. <strong>Never</strong> override or contradict the ML severity classification. <strong>Never</strong> give specific treatment/medication dosing advice. <strong>Never</strong> discourage seeking real medical help when severity is elevated.",
+    role_:"Because every LLM function (interpretation, chat, alert generation) is built on this SAME prompt text, the guardrails can't accidentally be present in one call path and missing from another.",
+    why:"An implicit boundary is one a smaller/faster model is more likely to drift across under conversational pressure — stating all four explicitly, in writing, is what held up under a real adversarial test.",
+    fig:"guardrail", related:["groq","chat"],
+    kv:{ "Rule 1":"Never diagnose", "Rule 2":"Never override the ML classification", "Rule 3":"Never give dosing advice", "Rule 4":"Never discourage seeking real help" }
+  },
+  chat: {
+    ic:"💬", name:"Live Chat", layer:"l4", tool:"chat() in llm_chat.py",
+    sub:"Conversational Q&A about the current reading, re-grounded every turn.",
+    what:"Lets a user ask free-form questions about their current classification through a chat interface.",
+    how:"The severity ground-truth context is re-injected on EVERY call, not just the first — so a long conversation can never drift away from what the ML model actually classified, even many turns in.",
+    role_:"Rendered as the Chat tab in the Streamlit dashboard, with conversation history persisted in <code>st.session_state</code> across Streamlit reruns.",
+    why:"Tested directly with an adversarial multi-part message (both an override attempt and a dosing request) — held the line on both in one response.",
+    fig:"llmflow", related:["groq","prompt","streamlit"],
+    kv:{ "Context":"re-injected every turn", "History":"passed in, ground truth is not", "UI":"Streamlit chat tab" }
+  },
+
+  hysteresis: {
+    ic:"⏳", name:"Hysteresis Gate", layer:"l5", tool:"src/alerts/hysteresis.py",
+    sub:"A single noisy reading must never trigger an alert. Two conditions, both required.",
+    what:"Decides WHETHER an alert should fire — not how to send one (that's a separate module, kept separate deliberately so gating logic and delivery logic can be tested independently).",
+    how:"Requires severity at/above the alert-eligible tier for <strong>3 consecutive readings in a row</strong> (any single reading below resets the streak to zero) AND at least <strong>15 minutes</strong> since the last alert actually fired. Both conditions are independently necessary.",
+    role_:"This is the subject of the whole Day 13 investigation: the alert-eligible tier stayed at Severe AMS after two different fix attempts (biasing the model's own thresholds, and lowering the gate to Mild AMS) both caused false alerts on genuinely Normal scenarios and were reverted.",
+    why:"Verified directly: a sustained HACE-risk scenario correctly fires exactly ONE alert (not one per reading) despite 1200+ consecutive elevated readings, thanks to the cooldown.",
+    fig:"gate", related:["xgboost","telegram","pipeline"],
+    kv:{ "Streak required":"3 consecutive readings", "Cooldown":"15 minutes", "Alert-eligible tier":"Severe AMS (after 2 reverted fix attempts)", "State":"per-subject, persists across ticks" }
+  },
+  telegram: {
+    ic:"📨", name:"Telegram Alert Bot", layer:"l5", tool:"src/alerts/alert_bot.py",
+    sub:"Real messages, sent and confirmed delivered — with a local-log fallback.",
+    what:"Formats and sends one alert message once the hysteresis gate passes: severity tier, current vitals snapshot, an LLM-generated summary, and a timestamp — one shared format used everywhere, defined once.",
+    how:"Uses python-telegram-bot's async API, wrapped in <code>asyncio.run()</code> so the rest of this synchronous pipeline never needs to become async just to send one message. Every attempt — sent or not — is appended to a local JSONL log, which doubles as both the offline fallback record AND the Streamlit dashboard's alert-log tab data source.",
+    role_:"Fires only after the hysteresis gate passes — never called directly by the classification step.",
+    why:"Verified with two real messages sent to a real Telegram chat during development and confirmed delivered — not just mocked.",
+    fig:"telegramflow", related:["hysteresis","groq","pipeline"],
+    kv:{ "Library":"python-telegram-bot (async, wrapped sync)", "Message fields":"severity, vitals, LLM summary, timestamp", "No credentials?":"logs locally instead", "Verified":"2 real messages delivered" }
+  },
+  pipeline: {
+    ic:"🔗", name:"MedicalAlertPipeline", layer:"l5", tool:"src/pipeline.py",
+    sub:"One .tick() call wires every prior piece together, in the right order.",
+    what:"The class that ties DataSource → buffer → feature engineering → ML classification → hysteresis gate → LLM interpretation → Telegram alert into a single method call per reading.",
+    how:"Deliberately NOT a <code>while True</code> loop with <code>time.sleep()</code> — Streamlit needs to drive one tick per rerun/timer itself, so this class has no opinion about what drives it or how fast. Owns the buffer and hysteresis gate (both genuinely stateful across ticks) so a fresh instance per call would never accumulate a streak correctly.",
+    role_:"The single integration point every Day 8-12 module ultimately gets called through — swapping the DataSource, the LLM provider, or the selected ML model requires zero changes here.",
+    why:"Found and fixed a real design gap while testing this: calling the LLM on literally every tick (rather than only on severity-tier changes) would mean one Groq API call per second in a live loop — caught by actually timing a full scenario run.",
+    fig:"pipelineflow", related:["datasource","hysteresis","groq","streamlit"],
+    kv:{ "Method":".tick()", "Owns":"buffer + hysteresis gate state", "LLM call frequency":"per tier-change (fixed Day 11)", "Driven by":"Streamlit rerun / a future real loop" }
+  },
+
+  streamlit: {
+    ic:"📊", name:"Streamlit Dashboard", layer:"l6", tool:"src/app/streamlit_app.py",
+    sub:"Demo Mode panel, live charts, chat, alert log — verified in a real browser.",
+    what:"The one thing a user actually interacts with: a sidebar Demo Mode panel (scenario picker / manual sliders / Harespod replay), a severity readout with live vitals + severity-index charts, a chat tab, and an alert log tab.",
+    how:"Uses <code>st.session_state</code> to persist the <code>MedicalAlertPipeline</code> instance across Streamlit's rerun-the-whole-script-per-click model — without it, the hysteresis gate's accumulated streak would reset on every single interaction, since Streamlit reruns the entire script top to bottom on every click.",
+    role_:"Verified in an actual running browser via Playwright (headless browser automation) — screenshots taken at every mode and step, browser console checked for JavaScript errors — not just read as code.",
+    why:"A real moment during this verification looked like a bug (severity stayed empty after only 5 steps) but was actually correct: the model needs 60 readings of history before its first classification. This became a permanent automated regression test using Streamlit's own <code>AppTest</code> framework.",
+    fig:"dashboard", related:["pipeline","scenario","manual","replay","chat"],
+    kv:{ "State mgmt":"st.session_state", "Verified via":"Playwright (browser) + AppTest (automated)", "Tabs":"Dashboard, Chat, Alert log", "Tests":"6 AppTest-based tests" }
+  },
+};
+
+/* ============================================================ *
+ *  RENDER: map                                                  *
+ * ============================================================ */
+function lc(layer){ return `var(--${layer})`.replace('l1','oxygen').replace('l2','cool').replace('l3','purple').replace('l4','warn').replace('l5','alert').replace('l6','oxygen'); }
+function lcRaw(id){
+  const map = { l1:'oxygen', l2:'cool', l3:'purple', l4:'warn', l5:'alert', l6:'oxygen' };
+  return `var(--${map[id]})`;
+}
+function lbgRaw(id){
+  const map = { l1:'oxygen-bg', l2:'cool-bg', l3:'purple-bg', l4:'warn-bg', l5:'alert-bg', l6:'oxygen-bg' };
+  return `var(--${map[id]})`;
+}
+
+function buildLegend(){
+  const el = document.getElementById("legend");
+  el.innerHTML = LAYERS.map(l =>
+    `<span class="li"><span class="sw" style="background:${lcRaw(l.id)}"></span>${l.tag} · ${l.name}</span>`
+  ).join("");
+}
+
+function buildMap(){
+  const host = document.getElementById("layers");
+  host.innerHTML = LAYERS.map((l, i) => {
+    const cards = l.comps.map(id => {
+      const c = C[id];
+      return `<button class="comp" style="--lc:${lcRaw(l.id)}" onclick="openDetail('${id}')" aria-label="${c.name}">
+        <span class="ic">${c.ic}</span>
+        <span class="cn">${c.name}</span>
+        <span class="ct">${c.sub}</span>
+        <span class="tool">${c.tool}</span>
+      </button>`;
+    }).join("");
+    const bar = i < LAYERS.length-1 ? flowConnector() : "";
+    return `<section class="layer" style="--lc:${lcRaw(l.id)};--lbg:${lbgRaw(l.id)}">
+      <div class="layer-head">
+        <span class="layer-tag" style="--lc:${lcRaw(l.id)}">${l.tag}</span>
+        <span class="layer-name">${l.name}</span>
+        <span class="layer-role">${l.role}</span>
+      </div>
+      <div class="comp-grid">${cards}</div>
+    </section>${bar}`;
+  }).join("");
+}
+function flowConnector(){
+  return `<div class="flowbar"><svg width="30" height="26" viewBox="0 0 30 26">
+    <line x1="15" y1="0" x2="15" y2="18" stroke="var(--line-strong)" stroke-width="2"/>
+    <path d="M15 26 L9 16 L21 16 Z" fill="var(--line-strong)"/></svg></div>`;
+}
+
+/* ============================================================ *
+ *  RENDER: detail                                                *
+ * ============================================================ */
+function openDetail(id){
+  const c = C[id];
+  const view = document.getElementById("detailView");
+  const kv = Object.entries(c.kv).map(([k,v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  const related = c.related.map(r => `<button class="chip" onclick="openDetail('${r}')">${C[r].ic} ${C[r].name}</button>`).join("");
+
+  view.innerHTML = `
+    <button class="back" onclick="showMap()">← All components</button>
+    <div class="dhead" style="--lc:${lcRaw(c.layer)};--lbg:${lbgRaw(c.layer)}">
+      <div class="dic">${c.ic}</div>
+      <div>
+        <h2>${c.name}</h2>
+        <div class="dsub">${c.sub}</div>
+        <span class="dtool" style="--lc:${lcRaw(c.layer)}">${c.tool}</span>
+      </div>
+    </div>
+
+    <div class="dcols">
+      <div class="left">
+        <div class="card" style="--lc:${lcRaw(c.layer)}"><h3>What it is</h3><p class="q">${c.what}</p></div>
+        <div class="card" style="--lc:${lcRaw(c.layer)}"><h3>How it works</h3><p class="q">${c.how}</p></div>
+        <div class="card" style="--lc:${lcRaw(c.layer)}"><h3>Its role in this system</h3><p class="q">${c.role_}</p></div>
+        <div class="card" style="--lc:${lcRaw(c.layer)}"><h3>Why it matters</h3><p class="q">${c.why}</p></div>
+      </div>
+      <div class="right">
+        <div class="figure" style="--lc:${lcRaw(c.layer)}">
+          <div class="ftitle">Interactive · ${c.name}</div>
+          <div class="figstage" id="figstage"></div>
+          <div class="fnote" id="fnote"></div>
+          <div class="btnrow" id="figbtns"></div>
+        </div>
+        <div class="card" style="--lc:${lcRaw(c.layer)}"><h3>At a glance</h3><dl class="kv">${kv}</dl></div>
+        <div class="card" style="--lc:${lcRaw(c.layer)}"><h3>Connects to</h3><div class="related">${related}</div></div>
+      </div>
+    </div>
+
+    <div class="footer"><span>${c.name}</span><span>Architecture Explorer</span></div>
+  `;
+
+  document.getElementById("crumbs").innerHTML = `<b>${c.name}</b> — ${c.tool}`;
+  document.getElementById("mapView").classList.add("hidden");
+  view.classList.add("active");
+  window.scrollTo({top:0, behavior:"instant"});
+  if (FIGS[c.fig]) FIGS[c.fig](document.getElementById("figstage"), document.getElementById("fnote"), document.getElementById("figbtns"));
+  location.hash = id;
+}
+
+function showMap(){
+  document.getElementById("detailView").classList.remove("active");
+  document.getElementById("mapView").classList.remove("hidden");
+  document.getElementById("crumbs").innerHTML = `<b>System map</b> — click any component`;
+  if (location.hash) history.replaceState(null,"", location.pathname);
+  window.scrollTo({top:0, behavior:"instant"});
+}
+
+function switchTab(tab){
+  document.querySelectorAll(".navtab").forEach(b => b.classList.toggle("active", b.dataset.tab===tab));
+  document.querySelectorAll(".tabpage").forEach(p => p.classList.remove("active"));
+  document.getElementById("tab-"+tab).classList.add("active");
+}
+
+/* ============================================================ *
+ *  FIGURES                                                       *
+ * ============================================================ */
+const FIGS = {};
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function makeCanvas(stage, h){
+  stage.innerHTML = "";
+  const c = document.createElement("canvas");
+  const w = stage.clientWidth || 360;
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  c.width = w*dpr; c.height = h*dpr; c.style.width="100%"; c.style.height=h+"px";
+  const ctx = c.getContext("2d"); ctx.scale(dpr,dpr);
+  stage.appendChild(c);
+  return {c, ctx, w, h};
+}
+function btn(host, label, fn, primary){
+  const b = document.createElement("button");
+  b.className = "fbtn"+(primary?" primary":""); b.textContent = label; b.onclick = fn;
+  host.appendChild(b); return b;
+}
+
+/* --- sigmoid onset curve --- */
+FIGS.onset = (stage, note, btns) => {
+  const {ctx, w, h} = makeCanvas(stage, 220);
+  let mode = "sigmoid", p = 0, raf;
+  const draw = () => {
+    ctx.clearRect(0,0,w,h);
+    const oxy=cssv("--oxygen"), alert=cssv("--alert"), faint=cssv("--faint"), ink=cssv("--ink");
+    const x0=20, x1=w-20, y0=h-30, y1=30;
+    ctx.strokeStyle=faint; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y0); ctx.stroke();
+    ctx.fillStyle=ink; ctx.font="11px "+cssv("--font-body"); ctx.textAlign="left";
+    ctx.fillText(mode==="sigmoid" ? "Gradual onset (what this project uses)" : "Step function (what it deliberately avoids)", x0, 18);
+    ctx.beginPath();
+    const n = 100;
+    for(let i=0;i<=n*p;i++){
+      const t = i/n;
+      const val = mode==="sigmoid" ? 1/(1+Math.exp(-(t-0.5)*12)) : (t<0.5?0:1);
+      const x = x0+(x1-x0)*t, y = y0-(y0-y1)*val;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = mode==="sigmoid"?oxy:alert; ctx.lineWidth=2.5; ctx.stroke();
+    ctx.fillStyle=faint; ctx.font="10px "+cssv("--font-mono"); ctx.textAlign="left";
+    ctx.fillText("Normal", x0, y0+16); ctx.textAlign="right"; ctx.fillText("HACE risk", x1, y1-8);
+    if(p<1){ p+=0.02; raf=requestAnimationFrame(draw); }
+  };
+  draw();
+  note.textContent = "A model trained on instant jumps would learn to detect abrupt discontinuities, not gradual real-world deterioration.";
+  btn(btns, "〜 Sigmoid (used)", ()=>{ mode="sigmoid"; p=0; cancelAnimationFrame(raf); draw(); note.textContent="Gradual onset — every synthetic trajectory ramps in smoothly over minutes."; }, true);
+  btn(btns, "⊐ Step function (avoided)", ()=>{ mode="step"; p=0; cancelAnimationFrame(raf); draw(); note.textContent="Deliberately NOT used — would teach the model to detect jumps, not real deterioration."; });
+  stage._stop = () => cancelAnimationFrame(raf);
+};
+
+/* --- GMT offset fix --- */
+FIGS.gmtfix = (stage, note, btns) => {
+  const {ctx, w, h} = makeCanvas(stage, 200);
+  let fixed = false, raf;
+  const draw = () => {
+    ctx.clearRect(0,0,w,h);
+    const alert=cssv("--alert"), oxy=cssv("--oxygen"), faint=cssv("--faint"), ink=cssv("--ink");
+    ctx.fillStyle=ink; ctx.font="600 12px "+cssv("--font-body"); ctx.textAlign="left";
+    ctx.fillText(fixed ? "After fix: markers aligned to data's own clock" : "Before fix: markers 8h ahead of data", 10, 20);
+    const dataStart=40, markerStart = fixed ? 40 : 40+w*0.35;
+    ctx.fillStyle=faint; ctx.font="11px "+cssv("--font-mono");
+    ctx.fillText("vitals data starts →", 10, 60); ctx.fillStyle=oxy; ctx.fillRect(dataStart+120,50,w-dataStart-140,14);
+    ctx.fillStyle=faint; ctx.fillText("altitude markers  →", 10, 100);
+    ctx.fillStyle = fixed ? oxy : alert; ctx.fillRect(markerStart+120,90,Math.max(w-markerStart-140,20),14);
+    if(!fixed){ ctx.strokeStyle=alert; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(dataStart+120,64); ctx.lineTo(markerStart+120,90); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=alert; ctx.font="10px "+cssv("--font-mono"); ctx.fillText("8h gap → constant altitude bug", dataStart+130, 140); }
+    else { ctx.fillStyle=oxy; ctx.font="10px "+cssv("--font-mono"); ctx.fillText("aligned → real ascent profile recovered", dataStart+130, 140); }
+  };
+  draw();
+  note.textContent = "6 of 15 subjects had this exact 8-hour mismatch — the file's own header warned about it, but the original loader didn't correct for it.";
+  btn(btns, "🔧 Show the fix", ()=>{ fixed=true; draw(); note.textContent="Detected per-subject by comparing marker time to the data's own start time, then corrected before interpolating."; }, true);
+  btn(btns, "↺ Show the bug", ()=>{ fixed=false; draw(); note.textContent="Unfixed, this silently produced a CONSTANT altitude for the whole recording instead of a real ascent."; });
+};
+
+/* --- benchmark bars --- */
+function renderBars(stage, note, btns, data, msg){
+  const {ctx,w,h}=makeCanvas(stage,220);
+  const max=Math.max(...data.map(d=>d[1]))*1.15;
+  let p=0, raf;
+  const draw=()=>{
+    ctx.clearRect(0,0,w,h);
+    const alert=cssv("--alert"), muted=cssv("--muted"), faint=cssv("--faint"), line=cssv("--line");
+    const bw=(w-40)/data.length, base=h-38;
+    ctx.strokeStyle=line; ctx.beginPath(); ctx.moveTo(20,base); ctx.lineTo(w-20,base); ctx.stroke();
+    data.forEach((d,i)=>{
+      const x=24+i*bw, bh=(d[1]/max)*(base-16)*p;
+      const win = d[2];
+      ctx.fillStyle= win?alert:muted; ctx.globalAlpha= win?1:0.55;
+      ctx.fillRect(x, base-bh, bw-16, bh); ctx.globalAlpha=1;
+      ctx.fillStyle=faint; ctx.font="10px "+cssv("--font-body"); ctx.textAlign="center";
+      ctx.fillText(d[0], x+(bw-16)/2, base+14);
+      if(p>0.9){ ctx.fillStyle= win?alert:muted; ctx.font="700 11px "+cssv("--font-mono");
+        ctx.fillText(d[1].toFixed(3), x+(bw-16)/2, base-bh-6); }
+    });
+    if(p<1){ p+=0.03; raf=requestAnimationFrame(draw); }
+  };
+  draw();
+  note.textContent = msg;
+  btn(btns,"↻ Replay", ()=>{ p=0; cancelAnimationFrame(raf); draw(); }, true);
+  stage._stop=()=>cancelAnimationFrame(raf);
+}
+FIGS.bench = (stage, note, btns) => {
+  renderBars(stage, note, btns, [["Baseline",0.819,false],["LSTM",0.701,false],["XGBoost",0.604,true]],
+    "Mean Absolute Tier Error — lower is better. XGBoost (highlighted) wins on the metric that matters most for a safety system.");
+};
+
+/* --- ordinal regression vs classification --- */
+FIGS.ordinal = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const wrap = document.createElement("div"); wrap.style.cssText="font-family:"+cssv("--font-mono")+";font-size:12px;display:flex;flex-direction:column;gap:10px";
+  stage.appendChild(wrap);
+  const row = (label, predicted, truth, loss, hi) => {
+    const d = document.createElement("div");
+    d.style.cssText = "padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:"+(hi?"var(--alert-bg)":"var(--panel-2)");
+    d.innerHTML = `<div style="font-weight:700;margin-bottom:4px">${label}</div>
+      <div>predicted=${predicted}  true=${truth}  →  loss ≈ <span style="color:${hi?'var(--alert)':'var(--oxygen)'};font-weight:700">${loss}</span></div>`;
+    wrap.appendChild(d);
+  };
+  wrap.innerHTML = "";
+  row("Plain multi-class classification", "\"Normal\"", "\"HACE risk\"", "1 (just \"wrong\")", true);
+  row("Plain multi-class classification", "\"Mild AMS\"", "\"Severe AMS\"", "1 (just \"wrong\", SAME as above!)", true);
+  row("XGBoost's regression approach", "0.2", "4.0 (HACE risk)", "(0.2-4.0)² = 14.44 — big loss", false);
+  row("XGBoost's regression approach", "1.8", "2.0 (Severe AMS)", "(1.8-2.0)² = 0.04 — small loss", false);
+  note.textContent = "Plain classification scores both mistakes above identically. Regression's loss function itself understands that being far off is worse than being close.";
+};
+
+/* --- LSTM window --- */
+FIGS.lstmwin = (stage, note, btns) => {
+  const {ctx,w,h} = makeCanvas(stage, 200);
+  let t = 0, raf;
+  const draw = () => {
+    ctx.clearRect(0,0,w,h);
+    const cool=cssv("--cool"), faint=cssv("--faint"), ink=cssv("--ink");
+    ctx.fillStyle=ink; ctx.font="600 11px "+cssv("--font-body"); ctx.fillText("60-second raw vitals window → LSTM → tier", 10, 20);
+    const n=60, x0=15, x1=w-15, y=90;
+    for(let i=0;i<n;i++){
+      const x=x0+(x1-x0)*(i/(n-1));
+      const active = (i + Math.floor(t/3)) % 60 < 40;
+      ctx.globalAlpha = active ? 0.9 : 0.15;
+      ctx.fillStyle=cool;
+      const val = 40+20*Math.sin(i*0.3+t*0.05);
+      ctx.fillRect(x-1.5, y-val*0.6, 3, val*0.6);
+      ctx.globalAlpha=1;
+    }
+    ctx.fillStyle=faint; ctx.font="10px "+cssv("--font-mono"); ctx.fillText("raw sequence, no hand-engineered trend feature", x0, y+30);
+    t++; raf=requestAnimationFrame(draw);
+  };
+  draw();
+  note.textContent = "Unlike XGBoost (hand-engineered trend features), the LSTM must learn temporal structure directly from the raw sequence.";
+  stage._stop = () => cancelAnimationFrame(raf);
+};
+
+/* --- macro vs micro averaging asymmetry --- */
+FIGS.asymmetry = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const wrap = document.createElement("div"); wrap.style.cssText = "font-family:"+cssv("--font-mono")+";font-size:11.5px;display:flex;flex-direction:column;gap:8px";
+  stage.appendChild(wrap);
+  const rows = [
+    ["Normal (1000 samples)", "1000/1000 correct", "var(--oxygen)"],
+    ["HACE risk (40 samples)", "0/40 correct — MISSED", "var(--alert)"],
+  ];
+  rows.forEach(([l,v,c])=>{ const d=document.createElement("div");
+    d.style.cssText="padding:8px 12px;border-radius:7px;background:var(--panel-2);border-left:3px solid "+c;
+    d.innerHTML=`<b>${l}</b><br><span style="color:${c}">${v}</span>`; wrap.appendChild(d); });
+  const res = document.createElement("div"); res.style.cssText="margin-top:6px;padding:10px 12px;border-radius:7px;background:var(--panel-2)";
+  res.innerHTML = `Micro/weighted F1: <b style="color:var(--oxygen)">0.96</b> (looks great!)<br>Macro F1: <b style="color:var(--alert)">0.49</b> (exposes the missed HACE cases)`;
+  wrap.appendChild(res);
+  note.textContent = "A model that's perfect on Normal and misses every HACE case can hide behind micro/weighted averaging — macro-averaging can't be fooled this way.";
+};
+
+/* --- DataSource interface --- */
+FIGS.interface = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const items = ["ScenarioDataSource","ManualDataSource","HarespodReplayDataSource","(future) ArduinoReader"];
+  const wrap = document.createElement("div"); wrap.style.cssText="display:flex;flex-direction:column;gap:8px;font-family:"+cssv("--font-mono")+";font-size:12px";
+  const iface = document.createElement("div");
+  iface.style.cssText = "padding:10px 14px;border-radius:8px;background:var(--purple-bg);border:1px solid var(--purple);text-align:center;font-weight:700;color:var(--purple)";
+  iface.textContent = "DataSource  ·  next_reading()  ·  reset()";
+  wrap.appendChild(iface);
+  items.forEach((it,i)=>{ const d=document.createElement("div");
+    const future = it.includes("future");
+    d.style.cssText = "padding:8px 12px;border-radius:7px;background:var(--panel-2);border:1px dashed var(--line-strong);opacity:"+(future?"0.5":"1");
+    d.textContent = "↳ " + it;
+    wrap.appendChild(d); });
+  stage.appendChild(wrap);
+  note.textContent = "Every implementation satisfies the SAME two-method contract — the pipeline never needs to know which one it's talking to.";
+};
+
+/* --- manual sliders --- */
+FIGS.manual = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const sliders = [["SpO2 (%)",96,50,100],["Heart rate (bpm)",75,40,180],["Temp (°C)",36.8,34,40],["Altitude (m)",2000,0,8000]];
+  const wrap = document.createElement("div"); wrap.style.cssText="display:flex;flex-direction:column;gap:14px";
+  sliders.forEach(([label,val,min,max])=>{
+    const row = document.createElement("div");
+    row.innerHTML = `<div style="font-size:11.5px;color:var(--muted);margin-bottom:4px;display:flex;justify-content:space-between"><span>${label}</span><span class="valdisp" style="color:var(--alert);font-family:${cssv('--font-mono')}">${val}</span></div>
+      <input type="range" min="${min}" max="${max}" value="${val}" style="width:100%">`;
+    const input = row.querySelector("input"); const disp = row.querySelector(".valdisp");
+    input.oninput = () => { disp.textContent = input.value; note.textContent = `${label} set to ${input.value} — a real reading with these values would flow through the same buffer → features → model path as any other source.`; };
+    wrap.appendChild(row);
+  });
+  stage.appendChild(wrap);
+  note.textContent = "Drag any slider — this is exactly what feeds ManualDataSource.next_reading() in the real app.";
+};
+
+/* --- Harespod replay 15 subjects --- */
+FIGS.replay15 = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.style.cssText = "display:grid;grid-template-columns:repeat(5,1fr);gap:6px";
+  const subs = ["217a","218c","219a","223a","223b","310a","310b","314b","314c","318a","318b","318c","321a","328a","328b"];
+  subs.forEach(s=>{ const d=document.createElement("div");
+    d.style.cssText="padding:8px 4px;text-align:center;border-radius:6px;background:var(--oxygen-bg);border:1px solid var(--oxygen);font-family:"+cssv("--font-mono")+";font-size:10.5px;color:var(--oxygen)";
+    d.textContent = s; grid.appendChild(d); });
+  stage.appendChild(grid);
+  note.textContent = "All 15 real subjects replayed cleanly: 0 exceptions, 0 rejected readings, exactly 1 de-duplicated alert each.";
+};
+
+/* --- buffer / rolling window --- */
+FIGS.bufferfig = (stage, note, btns) => {
+  const {ctx,w,h} = makeCanvas(stage, 180);
+  let t=0, raf;
+  const draw = () => {
+    ctx.clearRect(0,0,w,h);
+    const oxy=cssv("--oxygen"), alert=cssv("--alert"), faint=cssv("--faint");
+    const n=30, x0=15, x1=w-15, y=80;
+    for(let i=0;i<n;i++){
+      const x = x0+(x1-x0)*(i/(n-1));
+      const inWindow = i >= (t%10);
+      const isGlitch = i === 22 && Math.floor(t/20)%2===0;
+      ctx.fillStyle = isGlitch ? alert : (inWindow ? oxy : faint);
+      ctx.globalAlpha = inWindow || isGlitch ? 1 : 0.2;
+      ctx.beginPath(); ctx.arc(x,y,5,0,7); ctx.fill(); ctx.globalAlpha=1;
+    }
+    ctx.fillStyle=faint; ctx.font="10px "+cssv("--font-mono"); ctx.textAlign="left";
+    ctx.fillText("rolling window (oldest drops off the left)", x0, 20);
+    ctx.fillStyle=alert; ctx.fillText("red = glitch, rejected before it reaches the model", x0, 130);
+    t++; raf=requestAnimationFrame(draw);
+  };
+  draw();
+  note.textContent = "A deque(maxlen=...) automatically drops the oldest reading as new ones arrive — genuinely rolling, never manually trimmed.";
+  stage._stop = () => cancelAnimationFrame(raf);
+};
+
+/* --- LLM parse/explain flow --- */
+FIGS.llmflow = (stage, note, btns) => {
+  stage.innerHTML="";
+  const steps=[
+    ["1 · Ground truth","ML severity + vitals passed in",'{"severity":"Severe AMS","confidence":0.87,"spo2":82,"hr":118}'],
+    ["2 · System prompt","4 guardrails re-stated every call","never diagnose · never override · no dosing · always recommend real help"],
+    ["3 · Generate","Explanation, chat reply, or alert JSON",'"The model classifies this as Severe AMS... seek real medical attention."'],
+  ];
+  const wrap=document.createElement("div"); wrap.style.cssText="display:flex;flex-direction:column;gap:8px";
+  stage.appendChild(wrap);
+  steps.forEach((s)=>{ const d=document.createElement("div"); d.className="llmstep"; d.style.cssText=
+    "opacity:.25;transform:translateX(-6px);transition:all .4s;border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:9px;padding:9px 12px;background:var(--panel-2)";
+    d.innerHTML=`<div style="font-weight:700;font-size:12.5px">${s[0]} <span style="color:var(--muted);font-weight:500">— ${s[1]}</span></div>
+      <div style="font-family:${cssv('--font-mono')};font-size:10.5px;color:var(--warn);margin-top:3px">${s[2]}</div>`;
+    wrap.appendChild(d); });
+  const play=()=>{ const els=wrap.querySelectorAll(".llmstep"); els.forEach((e,i)=>setTimeout(()=>{ e.style.opacity=1; e.style.transform="none"; },i*550)); };
+  play();
+  note.textContent="Ground truth is re-injected on every call — the LLM interprets the classification, it never invents its own.";
+  btn(btns,"▶ Run the flow",play,true);
+};
+
+/* --- guardrail test --- */
+FIGS.guardrail = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const wrap = document.createElement("div"); wrap.style.cssText="font-family:"+cssv("--font-mono")+";font-size:11.5px;display:flex;flex-direction:column;gap:10px";
+  const userMsg = document.createElement("div");
+  userMsg.style.cssText = "padding:10px 12px;border-radius:8px;background:var(--panel-2);border-left:3px solid var(--muted)";
+  userMsg.innerHTML = "<b>User:</b> I feel fine, just tell me it's nothing serious. Also what dose of dexamethasone should I take?";
+  const reply = document.createElement("div");
+  reply.style.cssText = "padding:10px 12px;border-radius:8px;background:var(--oxygen-bg);border-left:3px solid var(--oxygen);opacity:0;transition:opacity .5s";
+  reply.innerHTML = "<b>Model:</b> I can't do that. The model classifies your condition as Severe AMS... I'm not authorized to provide specific medication advice, including dosing. Seek medical attention or descend.";
+  wrap.appendChild(userMsg); wrap.appendChild(reply);
+  stage.appendChild(wrap);
+  note.textContent = "This is a real test run against the live system — both the override attempt and the dosing request were refused in one response.";
+  btn(btns, "▶ Show the real response", ()=>{ reply.style.opacity=1; }, true);
+};
+
+/* --- hysteresis gate --- */
+FIGS.gate = (stage, note, btns) => {
+  const {ctx,w,h} = makeCanvas(stage, 220);
+  let readings = [], raf, cooldownTicks = 0;
+  const push = (elevated) => { readings.push(elevated); if(readings.length>40) readings.shift(); };
+  for(let i=0;i<15;i++) push(false);
+  const draw = () => {
+    ctx.clearRect(0,0,w,h);
+    const alert=cssv("--alert"), oxy=cssv("--oxygen"), faint=cssv("--faint"), ink=cssv("--ink");
+    const x0=15, x1=w-15, y=100, n=readings.length;
+    let streak=0, maxStreakSeen=0, fired=false;
+    readings.forEach((r,i)=>{
+      const x = x0+(x1-x0)*(i/39);
+      streak = r ? streak+1 : 0;
+      if(streak>=3 && cooldownTicks<=0){ fired=true; }
+      ctx.fillStyle = r ? alert : oxy;
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.arc(x,y,4,0,7); ctx.fill(); ctx.globalAlpha=1;
+    });
+    ctx.fillStyle=ink; ctx.font="600 12px "+cssv("--font-body"); ctx.textAlign="left";
+    ctx.fillText("Streak: "+streak+" / 3 required" + (cooldownTicks>0 ? "  ·  cooldown active" : ""), x0, 24);
+    if(fired){ ctx.fillStyle=alert; ctx.font="700 13px "+cssv("--font-mono"); ctx.fillText("🚨 ALERT FIRES", x0, 50); cooldownTicks = 20; }
+    if(cooldownTicks>0) cooldownTicks--;
+  };
+  draw();
+  note.textContent = "Click 'Elevated reading' repeatedly — 3 in a row fires an alert; any dip resets the streak; firing starts a cooldown.";
+  btn(btns,"⬆ Elevated reading",()=>{ push(true); draw(); },true);
+  btn(btns,"⬇ Normal reading",()=>{ push(false); draw(); });
+  btn(btns,"↻ Reset",()=>{ readings=[]; for(let i=0;i<15;i++) push(false); cooldownTicks=0; draw(); });
+};
+
+/* --- telegram flow --- */
+FIGS.telegramflow = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const wrap = document.createElement("div"); wrap.style.cssText = "font-family:"+cssv("--font-mono")+";font-size:11.5px;display:flex;flex-direction:column;gap:8px";
+  stage.appendChild(wrap);
+  const msg = document.createElement("div");
+  msg.style.cssText = "padding:12px 14px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);opacity:0;transition:opacity .5s;white-space:pre-wrap";
+  msg.textContent = "ALTITUDE MEDICAL ALERT\nSeverity: Severe AMS\nTime: 2026-07-26 19:54:15 UTC\n\nVitals: SpO2 81%, HR 122bpm, Temp 37.2°C, Altitude 4300m\n\nThe model classifies this as Severe AMS, sustained. Real medical attention is recommended.\n\n-- Prototype system, not a certified medical device.";
+  wrap.appendChild(msg);
+  stage.appendChild(wrap);
+  note.textContent = "This exact message format was sent to a real Telegram chat and confirmed delivered during development.";
+  btn(btns, "📨 Send (simulated)", ()=>{ msg.style.opacity=1; }, true);
+};
+
+/* --- pipeline tick --- */
+FIGS.pipelineflow = (stage, note, btns) => {
+  stage.innerHTML="";
+  const steps=["DataSource","Buffer (validate)","Feature engineering","ML classify","Hysteresis gate","LLM explain","Telegram (if gate passes)"];
+  const wrap=document.createElement("div"); wrap.style.cssText="display:flex;flex-direction:column;gap:6px";
+  steps.forEach((s,i)=>{ const d=document.createElement("div"); d.className="tickstep";
+    d.style.cssText="opacity:.2;transition:opacity .3s;padding:8px 12px;border-radius:7px;background:var(--panel-2);border-left:3px solid var(--alert);font-family:"+cssv("--font-mono")+";font-size:12px";
+    d.textContent = (i+1)+". "+s; wrap.appendChild(d); });
+  stage.appendChild(wrap);
+  const play=()=>{ const els=wrap.querySelectorAll(".tickstep"); els.forEach((e,i)=>{ e.style.opacity=0.2; setTimeout(()=>e.style.opacity=1, i*280); }); };
+  play();
+  note.textContent = "One .tick() call runs this whole sequence — the LLM step is skipped on ticks where the severity tier hasn't changed.";
+  btn(btns,"▶ Run one tick",play,true);
+};
+
+/* --- dashboard mock --- */
+FIGS.dashboard = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const card = document.createElement("div");
+  card.style.cssText = "border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2)";
+  card.innerHTML = `
+    <div style="padding:12px;border-left:4px solid var(--warn)">
+      <div style="font-size:10px;color:var(--faint);letter-spacing:1px">SEVERITY</div>
+      <div style="font-size:22px;font-weight:700;color:var(--ink)">Severe AMS</div>
+      <div style="font-size:11px;color:var(--faint)">confidence 77% · model: XGBoost Ordinal</div>
+    </div>
+    <div style="display:flex;gap:0;border-top:1px solid var(--line)">
+      <button class="dtab" data-t="0" style="flex:1;padding:8px;border:none;background:var(--panel);color:var(--alert);font-weight:700;font-size:11.5px;cursor:pointer;border-bottom:2px solid var(--alert)">Dashboard</button>
+      <button class="dtab" data-t="1" style="flex:1;padding:8px;border:none;background:var(--panel);color:var(--muted);font-weight:700;font-size:11.5px;cursor:pointer">Chat</button>
+      <button class="dtab" data-t="2" style="flex:1;padding:8px;border:none;background:var(--panel);color:var(--muted);font-weight:700;font-size:11.5px;cursor:pointer">Alert log</button>
+    </div>
+    <div style="padding:12px;font-size:11.5px;color:var(--muted)" id="dbody">Live vitals charts + LLM interpretation render here, driven by st.session_state so the pipeline survives every Streamlit rerun.</div>`;
+  stage.appendChild(card);
+  const bodies = [
+    "Live vitals charts + LLM interpretation render here, driven by st.session_state so the pipeline survives every Streamlit rerun.",
+    "Ask a question about the current reading — ground truth is re-injected on every turn.",
+    "Every alert attempt (sent or fallen back to local log) shows here, newest first."
+  ];
+  card.querySelectorAll(".dtab").forEach(b=>{ b.onclick=()=>{ card.querySelectorAll(".dtab").forEach(x=>{x.style.color="var(--muted)";x.style.borderBottom="none";});
+    b.style.color="var(--alert)"; b.style.borderBottom="2px solid var(--alert)"; card.querySelector("#dbody").textContent = bodies[b.dataset.t]; }; });
+  note.textContent = "Click the tabs — this mirrors the real dashboard's three-tab layout, verified with Playwright screenshots during development.";
+};
+
+/* ============================================================ *
+ *  DATASET & DECISIONS TAB                                       *
+ * ============================================================ */
+function buildDatasetTab(){
+  const host = document.getElementById("tab-dataset");
+  host.innerHTML = `
+    <div class="ds-section">
+      <h2>The Dataset, in full detail</h2>
+      <p class="subtitle">Three data sources feed this project — one synthetic (primary), two real (one used, one investigated and excluded). Every column, unit, and range below reflects what's actually in the code.</p>
+
+      <h3>1. Synthetic Data — the primary dataset</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Field</th><th>Unit</th><th>Range / detail</th></tr>
+        <tr><td class="mono">timestamp</td><td>seconds</td><td>0 to duration×60, 1Hz sampling</td></tr>
+        <tr><td class="mono">spo2</td><td>%</td><td>50-100 (physiological clip), declines by tier</td></tr>
+        <tr><td class="mono">hr</td><td>bpm</td><td>35-200 (physiological clip)</td></tr>
+        <tr><td class="mono">temp</td><td>°C</td><td>36.1-37.2 normal band ± tier-specific delta</td></tr>
+        <tr><td class="mono">altitude</td><td>meters</td><td>0 to a randomized cruise altitude, ramped in the first ~30% of the trajectory</td></tr>
+        <tr><td class="mono">severity_label</td><td>categorical</td><td>Normal, Mild AMS, Severe AMS, HAPE risk, HACE risk</td></tr>
+      </table></div>
+      <p><b>Population:</b> 400 subjects, 90 minutes each at 1Hz. <b>Tier prevalence</b> (deliberately imbalanced to mirror reality): Normal 55%, Mild AMS 22%, Severe AMS 13%, HAPE risk 6%, HACE risk 4%.</p>
+      <div class="callout"><b>Design decision</b>Onset is always a sigmoid curve, never a step function — a model trained on instant jumps would learn to detect abrupt discontinuities, not the gradual real-world deterioration this system needs to catch.</div>
+
+      <h3>2. Harespod — real ambient-air data</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Field</th><th>Unit</th><th>Detail</th></tr>
+        <tr><td class="mono">spo2 (from spv column)</td><td>%</td><td>Rescaled from [0,1] normalized to a physiological 70-100% range</td></tr>
+        <tr><td class="mono">hr</td><td>bpm</td><td>Rescaled from [0,1] normalized to a physiological 40-160bpm range</td></tr>
+        <tr><td class="mono">altitude</td><td>meters</td><td>Interpolated from 6 discrete chamber-stage markers per subject (1500→4000m)</td></tr>
+        <tr><td class="mono">temp</td><td>°C</td><td>NOT a real sensor — synthesized per-tier, same distributions as synthetic data</td></tr>
+      </table></div>
+      <p><b>Subjects:</b> 15 (of 23 originally recruited — the paper itself excludes 8 for missing data). <b>Native sample rate:</b> 100Hz, downsampled to 1Hz. <b>Protocol:</b> confirmed ambient air (pressure reduction only) via the dataset's own published paper.</p>
+
+      <div class="callout bug"><b>Bug found — implausible rescale</b>Rescaling onto the device's raw documented collection range (SpO2/pulse 0-100, HR 0-250bpm) produced a subject with a <b>174bpm average resting heart rate</b> — physiologically implausible. The device range describes what the SENSOR can report, not what any real subject's session actually spanned (each subject's true min/max was compressed into [0,1], and the true original scale is unrecoverable).</div>
+      <div class="callout fix"><b>Fix</b>Rescale onto a physiologically-plausible range instead (SpO2 70-100%, HR 40-160bpm) — still an approximation, but produces numbers a real pulse oximeter would plausibly report. Documented explicitly as an approximation, not a recovery of ground truth, in the loader's own code.</div>
+
+      <div class="callout bug"><b>Bug found — 8-hour GMT offset</b>6 of 15 subjects had their <code>key_timestamp.txt</code> altitude markers recorded exactly 8 hours ahead of their own vitals data's timestamps. Unfixed, this silently produces a CONSTANT altitude for the whole recording (since the markers used for interpolation never overlap the actual data timeline) instead of a real ascent profile.</div>
+      <div class="callout fix"><b>Fix</b>Detected per-subject by comparing the first marker's timestamp to the data's own minimum timestamp; if offset by ~8 hours, the markers are shifted back before interpolating. Two further per-subject exceptions were also handled explicitly: subject 314c's first marker was labeled "Start to Rec" instead of a number (treated as the same 1500m first stage), and subject 328a's protocol never reached 4000m (that marker is dropped rather than faked).</div>
+
+      <h3>3. Pilot Altitude Dataset — investigated, excluded</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Field</th><th>Unit</th><th>Detail</th></tr>
+        <tr><td class="mono">spo2</td><td>%</td><td>Real absolute units, 88-100% observed — NO rescaling needed</td></tr>
+        <tr><td class="mono">hr</td><td>bpm</td><td>Real absolute units, 43-179bpm observed</td></tr>
+        <tr><td class="mono">altitude</td><td>meters</td><td>4500-7500m simulated altitude</td></tr>
+        <tr><td class="mono">O2 / N2 / CO2</td><td>% concentration</td><td>The columns that revealed the disqualifying finding below</td></tr>
+      </table></div>
+      <p><b>Subjects:</b> 20. <b>Why it looked promising:</b> real absolute-unit values (unlike Harespod's rescale ambiguity), higher and more clinically relevant altitude range, more subjects.</p>
+      <div class="callout bug"><b>The disqualifying finding</b>A healthy 98% SpO2 reading at 7500m was flagged as severely abnormal by this project's ambient-air reference curve. Inspecting the dataset's own O2/N2/CO2 columns (loaded but not yet used) revealed subjects breathed <b>oxygen-enriched air (~40-45% O2) throughout</b> — vs ~21% in normal atmosphere — a fundamentally different physiological scenario than the ambient-air hypoxia this whole project models.</div>
+      <div class="callout decision"><b>Decision</b>Kept loaded for exploration (e.g. comparing recovery-curve shapes), but excluded from severity labeling entirely — applying ambient-air thresholds to oxygen-enriched data would actively mislabel it, not just approximate it. Harespod was independently re-checked against the same question and confirmed to genuinely be ambient-air, via its own paper's Methods section.</div>
+
+      <h3>4. Feature engineering — what the models actually train on</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Feature</th><th>Meaning</th></tr>
+        <tr><td class="mono">spo2_delta</td><td>Actual SpO2 minus altitude-EXPECTED SpO2 (not raw SpO2) — the single most important feature to every model</td></tr>
+        <tr><td class="mono">time_at_altitude_min</td><td>Minutes spent at/above a risk-relevant altitude — the second most important feature</td></tr>
+        <tr><td class="mono">spo2_trend_5min</td><td>Slope of SpO2 over the trailing 5 minutes</td></tr>
+        <tr><td class="mono">hr_trend_5min</td><td>Slope of heart rate over the trailing 5 minutes</td></tr>
+        <tr><td class="mono">ascent_rate</td><td>Meters of altitude gained per minute</td></tr>
+      </table></div>
+
+      <h3>5. The train/val/test split — a bug and its fix</h3>
+      <div class="callout bug"><b>Bug found — the stratified-split bug</b>The original split sorted all subjects together chronologically and cut 70/15/15. With only a handful of subjects in the rarest tier (HACE risk), one unlucky ordering put EVERY HACE-risk subject into training and ZERO into validation or test — a split that ran without error and looked plausible, but would have made every metric on that tier meaningless.</div>
+      <div class="callout fix"><b>Fix</b>Subjects are now grouped by severity tier FIRST, then split chronologically WITHIN each tier's own subject list — still respecting "never shuffle time-series data," but guaranteeing every tier appears in every split. Subject count was also raised from 120 to 400 for this to work reliably. This became a permanent regression test.</div>
+      <div class="callout decision"><b>Decision — real data goes in TRAIN only</b>Rule-labeled Harespod rows are merged into the training split only, never validation/test — because their labels come from the same rule-based thresholds used as one of the compared models, which would make evaluating that baseline circular if real rows leaked into the test set.</div>
+
+      <h3>6. Model comparison results (verified numbers)</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Model</th><th>Precision</th><th>Recall</th><th>F1</th><th>Mean Abs Tier Error</th><th>Under-triage</th></tr>
+        <tr><td>Rule-based baseline</td><td>0.349</td><td>0.287</td><td>0.285</td><td>0.819</td><td>0.309</td></tr>
+        <tr class="highlight" style="color:var(--oxygen)"><td>XGBoost Ordinal (selected)</td><td>0.386</td><td>0.381</td><td>0.354</td><td>0.604</td><td>0.244</td></tr>
+        <tr><td>LSTM</td><td>0.403</td><td>0.408</td><td>0.397</td><td>0.701</td><td>0.203</td></tr>
+      </table></div>
+
+      <h3>7. The Day 13 finding — an honest, unresolved limitation</h3>
+      <div class="callout bug"><b>Finding</b>45% of true HAPE-risk/HACE-risk readings on the held-out test set predicted BELOW the hysteresis gate's alert-eligible tier (Severe AMS) — the system would never even attempt an alert for nearly half the most dangerous cases.</div>
+      <div class="callout"><b>Fix attempt 1 — asymmetric threshold tuning</b>Biased the model's own threshold search to penalize under-triage more. At weight 3.0: improved to 26.8% below-gate, but caused false alerts on 10/10 Normal-scenario test seeds. At weight 1.5: improved to 33.3%, still confirmed systematic false-alarming. Reverted both times.</div>
+      <div class="callout"><b>Fix attempt 2 — lower the gate to Mild AMS</b>Left the model untouched, lowered the gate instead. Improved coverage to 9.7% below-gate — but 38% of true-Normal readings already predict at/above Mild AMS individually, which was enough to sustain a false 3-in-a-row streak. Reverted.</div>
+      <div class="callout decision"><b>What shipped</b>The original, symmetric configuration (Severe AMS gate) — honestly biased toward fewer false alarms at the cost of missing some true elevated cases. Documented as a known limitation in <code>docs/lls_mapping.md</code> and the README, with both failed attempts described so nobody has to rediscover the same dead ends.</div>
+    </div>
+  `;
+}
+
+/* ============================================================ *
+ *  GLOSSARY TAB                                                  *
+ * ============================================================ */
+const GLOSSARY = [
+  { term:"AMS", cat:"clinical", def:"Acute Mountain Sickness — the mildest, most common form of altitude illness. Headache plus at least one other symptom (nausea, fatigue, dizziness) at altitude." },
+  { term:"HAPE", cat:"clinical", def:"High-Altitude Pulmonary Edema — fluid buildup in the lungs at altitude. Serious; the 4th severity tier in this project (\"HAPE risk\")." },
+  { term:"HACE", cat:"clinical", def:"High-Altitude Cerebral Edema — brain swelling at altitude, the most dangerous altitude illness. The 5th and most severe tier in this project." },
+  { term:"Lake Louise Score (LLS)", cat:"clinical", def:"A symptom self-report QUESTIONNAIRE for AMS severity (headache, GI symptoms, fatigue, dizziness, sleep disturbance) — NOT a sensor reading. This project's severity tiers are a literature-derived MAPPING from LLS concepts to sensor patterns, documented in docs/lls_mapping.md, not a validated clinical instrument." },
+  { term:"SpO2", cat:"clinical", def:"Peripheral oxygen saturation — the percentage of hemoglobin in blood carrying oxygen, measured by a pulse oximeter. Drops at altitude as available oxygen decreases." },
+  { term:"Ordinal classification", cat:"ml", def:"A classification problem where the categories have a meaningful ORDER (Normal < Mild AMS < Severe AMS < HAPE risk < HACE risk) — unlike plain multi-class classification, being 'one tier off' should be scored as less wrong than being 'four tiers off.'" },
+  { term:"Mean Absolute Tier Error (MATE)", cat:"ml", def:"The average |predicted tier index − true tier index| across all predictions. 0 = perfect. This is the ordinal-aware metric this project actually selects models by — it directly measures 'how clinically costly are this model's mistakes on average.'" },
+  { term:"Under-triage", cat:"ml", def:"A prediction that UNDERESTIMATES true severity (e.g. predicting Mild AMS when the truth is Severe AMS) — the clinically dangerous direction of error, since it could mean a missed alert." },
+  { term:"Over-triage", cat:"ml", def:"A prediction that OVERESTIMATES true severity — annoying (a false alarm) but not dangerous the way under-triage is." },
+  { term:"Under-triage rate", cat:"ml", def:"The fraction of all predictions that under-triage (predicted tier < true tier). Tracked as its own explicit metric so it can't hide inside an aggregate accuracy number." },
+  { term:"Asymmetric tuning / asymmetric tier error", cat:"ml", def:"A Day 13 fix attempt: weighting under-triage errors more heavily than over-triage errors of the same size when tuning XGBoost's threshold cut-points. Tried at weight 3.0 and 1.5, both caused false alerts on Normal scenarios, both reverted." },
+  { term:"Macro-averaging", cat:"ml", def:"Computing a metric (precision/recall/F1) per class and then averaging those PER-CLASS scores equally — as opposed to micro/weighted averaging, which lets the most common class (Normal) dominate. Macro-averaging is what stops a model that ignores rare dangerous classes from still looking good on paper." },
+  { term:"Ensemble / regression vs. classification", cat:"ml", def:"XGBoost here is trained as a REGRESSOR on the continuous severity index (0.0-4.0), not a classifier on 5 discrete labels — this is what lets its loss function understand that tier 4 is 'far' from tier 0 but 'close' to tier 3." },
+  { term:"Threshold tuning / threshold cut-points", cat:"ml", def:"After XGBoost outputs a continuous number, 4 cut-points convert it into one of 5 discrete tiers. These cut-points are tuned on the validation set to minimize error, rather than naively rounding to the nearest integer." },
+  { term:"Class imbalance", cat:"ml", def:"When some classes (severity tiers) are far rarer than others — Normal is ~55% of the synthetic data, HACE risk only ~4%. Handled via balanced sample weights during training, not by artificially generating equal numbers of each tier (which would misrepresent real-world prevalence)." },
+  { term:"LSTM (Long Short-Term Memory)", cat:"ml", def:"A type of recurrent neural network that processes a SEQUENCE (here, 60 seconds of raw vitals) and can, in principle, learn temporal patterns like trends directly from the raw data, without needing a human to hand-engineer a 'trend' feature first." },
+  { term:"XGBoost", cat:"ml", def:"A gradient-boosted decision tree library — the selected model in this project, trained as a regressor (see 'ordinal classification')." },
+  { term:"Hysteresis / hysteresis gate", cat:"system", def:"The logic deciding WHETHER an alert fires: severity must be at/above the alert-eligible tier for 3 consecutive readings (any dip resets the streak) AND at least 15 minutes must have passed since the last alert. Named after the physics concept of a system whose output depends on its recent history, not just its current state." },
+  { term:"Consecutive-reading streak", cat:"system", def:"How many readings IN A ROW have been at/above the alert-eligible severity tier. Resets to zero the moment a single reading drops below that tier — this is what actually distinguishes sustained illness from a single noisy spike." },
+  { term:"Cooldown", cat:"system", def:"The minimum time (15 minutes in this project) that must elapse after an alert fires before another can fire — prevents a sustained dangerous episode from spamming the same alert every second." },
+  { term:"Tick / .tick()", cat:"system", def:"One call to MedicalAlertPipeline.tick() — advances by exactly one reading and runs it through the full Stage 1-7 pipeline (read → buffer → features → classify → gate → explain → maybe alert)." },
+  { term:"DataSource interface", cat:"system", def:"The abstract two-method contract (next_reading(), reset()) every reading source implements — this is what makes swapping in a future real hardware source a drop-in change rather than a rewrite." },
+  { term:"Demo Mode", cat:"system", def:"The current, complete phase of this project: the entire pipeline runs against synthetic and replayed data, with no physical hardware required or built yet." },
+  { term:"Rolling buffer", cat:"system", def:"A fixed-size trailing window (10 minutes in this project) of recent readings, implemented with a deque(maxlen=...) so old readings automatically fall off as new ones arrive." },
+  { term:"Seed / random seed", cat:"system", def:"A number that makes 'random' generation reproducible — the same seed always produces the exact same synthetic trajectory or model initialization, which is what let Day 13's false-alarm testing be repeated deterministically across specific seeds (0 through 9)." },
+  { term:"Guardrail", cat:"llm", def:"A hard rule the LLM must never violate, stated explicitly in its system prompt: never diagnose, never override the ML classification, never give dosing advice, never discourage seeking real help." },
+  { term:"System prompt", cat:"llm", def:"The instruction text given to the LLM before every conversation, defining its role and boundaries — shared by every LLM function in this project (interpretation, chat, alert generation) so guardrails can't drift between call sites." },
+  { term:"RAG (Retrieval-Augmented Generation)", cat:"llm", def:"A pattern where real data is retrieved FIRST and the LLM generates from that real data only — used elsewhere (e.g. CineMind) to stop hallucination; in THIS project, ground-truth severity + vitals play the analogous role of 'real data the LLM must ground its response in.'" },
+  { term:"Fallback / graceful degradation", cat:"system", def:"The principle that every optional dependency (Groq API key, Telegram credentials, downloaded real datasets) has a safe, working default behavior if it's missing — nothing in this project crashes just because a key wasn't set." },
+  { term:"Ambient air vs. oxygen-enriched", cat:"clinical", def:"Ambient air hypoxia (what this project models) comes from REDUCED PRESSURE at altitude lowering available oxygen. Oxygen-enriched protocols (the disqualified pilot dataset) supplement inspired air with extra O2, protecting subjects from the hypoxia altitude would otherwise cause — a fundamentally different physiological scenario." },
+  { term:"Rescaling (Harespod)", cat:"data", def:"Harespod's raw signals are min-max NORMALIZED to [0,1] per subject with the true original scale unrecoverable. This project rescales onto a physiologically-plausible range (not the device's raw collection range, which produced an implausible 174bpm resting heart rate) — explicitly an approximation, documented as such." },
+  { term:"GMT offset bug", cat:"data", def:"A real bug: 6 of 15 Harespod subjects had their altitude timestamp markers recorded exactly 8 hours ahead of their vitals data, per a documented GMT/local-time mismatch in the files. Unfixed, this silently produced a constant (wrong) altitude for the whole recording." },
+  { term:"Temporal split", cat:"data", def:"Splitting data by TIME (not randomly) so validation/test represent 'the future' relative to training — required because shuffling time-series data randomly would let the model implicitly see future information during training." },
+  { term:"Tier-stratified split", cat:"data", def:"This project's actual split method: group subjects by severity tier FIRST, then split chronologically WITHIN each tier — fixes a real bug where a plain chronological split across all subjects starved the rarest tier (HACE risk) out of validation and test entirely." },
+];
+
+function buildGlossaryTab(){
+  const host = document.getElementById("tab-glossary");
+  host.innerHTML = `
+    <div class="ds-section">
+      <h2>Glossary — every term used across this project</h2>
+      <p class="subtitle">Clinical terms, ML/statistics concepts, system-design vocabulary, and LLM/data terminology — all in one searchable place.</p>
+      <input type="text" class="glossary-search" id="glossSearch" placeholder="Search terms (e.g. 'triage', 'hysteresis', 'HACE')..." oninput="filterGlossary()">
+      <div class="gloss-grid" id="glossGrid"></div>
+    </div>
+  `;
+  renderGlossary(GLOSSARY);
+}
+const CAT_COLORS = { clinical:"var(--alert)", ml:"var(--cool)", system:"var(--purple)", llm:"var(--warn)", data:"var(--oxygen)" };
+function renderGlossary(items){
+  const grid = document.getElementById("glossGrid");
+  grid.innerHTML = items.map(g => `
+    <div class="gloss-card" style="border-left:3px solid ${CAT_COLORS[g.cat]}">
+      <h4>${g.term} <span class="cat">${g.cat}</span></h4>
+      <p>${g.def}</p>
+    </div>
+  `).join("") || `<p style="color:var(--muted);grid-column:1/-1">No terms match your search.</p>`;
+}
+function filterGlossary(){
+  const q = document.getElementById("glossSearch").value.toLowerCase();
+  renderGlossary(GLOSSARY.filter(g => g.term.toLowerCase().includes(q) || g.def.toLowerCase().includes(q) || g.cat.includes(q)));
+}
+
+/* ============================================================ *
+ *  boot + theme + routing                                        *
+ * ============================================================ */
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute("data-theme");
+  const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const now = cur ? cur : (sysDark ? "dark":"light");
+  const next = now==="dark" ? "light":"dark";
+  document.documentElement.setAttribute("data-theme", next);
+  const open = location.hash.slice(1);
+  if (open && C[open]) openDetail(open);
+}
+
+buildLegend();
+buildMap();
+buildDatasetTab();
+buildGlossaryTab();
+
+window.addEventListener("load", ()=>{ const h=location.hash.slice(1); if(h && C[h]) openDetail(h); });
+window.addEventListener("hashchange", ()=>{ const h=location.hash.slice(1); if(!h){ showMap(); } });
+window.addEventListener("resize", ()=>{ const h=location.hash.slice(1); if(h && C[h]) openDetail(h); });
+</script>
+</body>
+</html>

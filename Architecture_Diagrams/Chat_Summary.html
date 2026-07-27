@@ -1,0 +1,563 @@
+<!doctype html>
+<meta charset="UTF-8" />
+<title>High-Altitude Medical Alert System — Chat Summary</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #f7f5f1;
+    --bg-raised: #ffffff;
+    --card: #fdfcfa;
+    --hair: #e4ded3;
+    --hair-strong: #cfc7b6;
+    --ink: #211f1c;
+    --ink-soft: #514c44;
+    --muted: #837c6f;
+    --accent: #c8362a;
+    --accent-ink: #ffffff;
+    --accent-soft: #f4e2df;
+    --teal: #2f7d74;
+    --teal-soft: #e2f0ee;
+    --gold: #a5761f;
+    --gold-soft: #f4ead2;
+    --blue: #3c5f9e;
+    --blue-soft: #e5eaf5;
+    --code-bg: #211f1c;
+    --code-ink: #eae6dc;
+    --code-muted: #9a9384;
+    --shadow: 0 1px 2px rgba(33,31,28,0.06), 0 8px 24px rgba(33,31,28,0.06);
+    --radius: 10px;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "Cascadia Code", "SF Mono", "JetBrains Mono", Consolas, "Liberation Mono", monospace;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1114; --bg-raised: #14171b; --card: #14171b;
+    --hair: #262b31; --hair-strong: #363c44;
+    --ink: #e9e6de; --ink-soft: #c2beb2; --muted: #8b8b86;
+    --accent: #ef6a5a; --accent-ink: #14171b; --accent-soft: #2a1c1a;
+    --teal: #6fc9bd; --teal-soft: #16302c;
+    --gold: #d9ad5c; --gold-soft: #2e2718;
+    --blue: #90a8dd; --blue-soft: #1c2436;
+    --code-bg: #0b0d10; --code-ink: #e7e3d8; --code-muted: #83807a;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1114; --bg-raised: #14171b; --card: #14171b;
+      --hair: #262b31; --hair-strong: #363c44;
+      --ink: #e9e6de; --ink-soft: #c2beb2; --muted: #8b8b86;
+      --accent: #ef6a5a; --accent-ink: #14171b; --accent-soft: #2a1c1a;
+      --teal: #6fc9bd; --teal-soft: #16302c;
+      --gold: #d9ad5c; --gold-soft: #2e2718;
+      --blue: #90a8dd; --blue-soft: #1c2436;
+      --code-bg: #0b0d10; --code-ink: #e7e3d8; --code-muted: #83807a;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+
+  .shell { display: grid; grid-template-columns: 290px minmax(0, 1fr); max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 980px) { .shell { grid-template-columns: 1fr; } }
+
+  .side { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: 28px 20px 40px; border-right: 1px solid var(--hair); font-family: var(--sans); }
+  @media (max-width: 980px) { .side { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--hair); } }
+  .side::-webkit-scrollbar { width: 8px; }
+  .side::-webkit-scrollbar-thumb { background: var(--hair-strong); border-radius: 8px; }
+  .brand { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .brand .mark { font-weight: 800; font-size: 1.05rem; letter-spacing: -0.02em; }
+  .brand .mark::before { content: "◆"; color: var(--accent); margin-right: 6px; font-size: 0.75em; }
+  .side .tagline { font-size: 0.78rem; color: var(--muted); margin: 0 0 24px; line-height: 1.5; }
+  .side nav { display: flex; flex-direction: column; gap: 2px; }
+  .side .group-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin: 18px 0 6px; font-weight: 700; }
+  .side .group-label:first-child { margin-top: 0; }
+  .side a { color: var(--ink-soft); text-decoration: none; font-size: 0.86rem; padding: 5px 8px; border-radius: 6px; display: block; border-left: 2px solid transparent; }
+  .side a:hover { background: var(--card); color: var(--ink); }
+  .theme-toggle { margin-top: 24px; display: inline-flex; gap: 6px; font-size: 0.72rem; font-family: var(--mono); color: var(--muted); cursor: pointer; border: 1px solid var(--hair-strong); padding: 5px 10px; border-radius: 100px; background: var(--card); }
+  .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+  main { padding: 48px 56px 120px; min-width: 0; }
+  @media (max-width: 980px) { main { padding: 32px 22px 90px; } }
+
+  .doc-header { margin-bottom: 56px; padding-bottom: 32px; border-bottom: 1px solid var(--hair); }
+  .eyebrow { font-family: var(--sans); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); font-weight: 700; margin-bottom: 14px; }
+  h1.title { font-family: var(--sans); font-size: clamp(2rem, 4vw, 2.9rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.08; margin: 0 0 16px; text-wrap: balance; color: var(--ink); }
+  .doc-header .lede { font-size: 1.08rem; color: var(--ink-soft); max-width: 68ch; margin: 0 0 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 10px; font-family: var(--mono); font-size: 0.76rem; }
+  .chip { padding: 3px 10px; border-radius: 100px; border: 1px solid var(--hair-strong); color: var(--ink-soft); background: var(--card); }
+  .chip.accent { border-color: var(--accent); color: var(--accent); }
+
+  section.phase { margin-bottom: 68px; }
+  .phase-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; flex-wrap: wrap; }
+  h2 { font-family: var(--sans); font-size: 1.55rem; font-weight: 800; letter-spacing: -0.01em; margin: 0; color: var(--ink); text-wrap: balance; }
+  .phase-tag { font-family: var(--mono); font-size: 0.72rem; color: var(--accent-ink); background: var(--accent); padding: 2px 9px; border-radius: 5px; font-weight: 700; white-space: nowrap; }
+  .phase-tag.blue { background: var(--blue); }
+  .phase-tag.gold { background: var(--gold); }
+  .phase-sub { font-family: var(--sans); color: var(--muted); font-size: 0.92rem; margin: 0 0 28px; max-width: 74ch; }
+
+  article.file { margin: 0 0 32px; padding: 26px 28px; background: var(--card); border: 1px solid var(--hair); border-radius: var(--radius); box-shadow: var(--shadow); }
+  article.file > h3 { font-family: var(--sans); font-size: 1.05rem; margin: 0 0 12px; color: var(--ink); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  p { margin: 0 0 14px; max-width: 74ch; }
+  p:last-child { margin-bottom: 0; }
+  code { font-family: var(--mono); font-size: 0.86em; background: var(--accent-soft); color: var(--accent); padding: 1px 5px; border-radius: 4px; }
+  ul, ol { margin: 0 0 14px; padding-left: 22px; max-width: 74ch; }
+  li { margin-bottom: 8px; }
+  li:last-child { margin-bottom: 0; }
+
+  .why-box { margin: 14px 0; padding: 12px 16px; background: var(--gold-soft); border-left: 3px solid var(--gold); border-radius: 0 7px 7px 0; font-family: var(--sans); font-size: 0.87rem; color: var(--ink-soft); }
+  .why-box b { color: var(--ink); }
+  .bug-box { margin: 14px 0; padding: 12px 16px; background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: 0 7px 7px 0; font-family: var(--sans); font-size: 0.87rem; color: var(--ink-soft); }
+  .bug-box b { color: var(--ink); }
+  .fix-box { margin: 14px 0; padding: 12px 16px; background: var(--teal-soft); border-left: 3px solid var(--teal); border-radius: 0 7px 7px 0; font-family: var(--sans); font-size: 0.87rem; color: var(--ink-soft); }
+  .fix-box b { color: var(--ink); }
+  .decision-box { margin: 14px 0; padding: 12px 16px; background: var(--blue-soft); border-left: 3px solid var(--blue); border-radius: 0 7px 7px 0; font-family: var(--sans); font-size: 0.87rem; color: var(--ink-soft); }
+  .decision-box b { color: var(--ink); }
+
+  .output-box { margin: 12px 0 0; padding: 11px 15px; background: var(--teal-soft); border-left: 3px solid var(--teal); border-radius: 0 7px 7px 0; font-family: var(--mono); font-size: 0.82rem; color: var(--ink-soft); white-space: pre-wrap; }
+  .output-box .lbl { font-family: var(--sans); font-weight: 700; text-transform: uppercase; font-size: 0.64rem; letter-spacing: 0.07em; color: var(--teal); display: block; margin-bottom: 4px; }
+
+  pre { background: var(--code-bg); color: var(--code-ink); padding: 16px 18px; border-radius: 8px; overflow-x: auto; font-family: var(--mono); font-size: 0.82rem; line-height: 1.6; margin: 0 0 14px; tab-size: 4; }
+  pre::-webkit-scrollbar { height: 8px; }
+  pre::-webkit-scrollbar-thumb { background: #3a3a3a; border-radius: 8px; }
+
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 0.84rem; }
+  th, td { text-align: left; padding: 8px 14px; border-bottom: 1px solid var(--hair); font-variant-numeric: tabular-nums; }
+  th { font-family: var(--sans); font-weight: 700; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.06em; color: var(--muted); border-bottom: 1px solid var(--hair-strong); }
+  tr.highlight td { color: var(--teal); font-weight: 700; }
+
+  .timeline { position: relative; margin: 24px 0; padding-left: 28px; border-left: 2px solid var(--hair-strong); }
+  .tl-item { position: relative; margin-bottom: 20px; }
+  .tl-item::before { content: ""; position: absolute; left: -34px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); }
+  .tl-item h4 { font-family: var(--sans); font-size: 0.95rem; margin: 0 0 4px; color: var(--ink); }
+  .tl-item p { font-size: 0.92rem; color: var(--ink-soft); margin: 0; }
+
+  .qa-card { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; padding: 16px 18px; background: var(--blue-soft); border-radius: var(--radius); border: 1px solid var(--hair); }
+  .qa-card .q { font-family: var(--sans); font-weight: 700; font-size: 0.9rem; color: var(--blue); }
+  .qa-card .a { font-family: var(--sans); font-size: 0.88rem; color: var(--ink-soft); }
+
+  footer { margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--hair); font-family: var(--sans); font-size: 0.8rem; color: var(--muted); }
+  ::selection { background: var(--accent-soft); color: var(--accent); }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><span class="mark">Chat Summary</span></div>
+    <p class="tagline">A complete narrative of every step taken across this entire conversation, in the order it actually happened — decisions, bugs found, fixes, reverts, and why.</p>
+
+    <nav>
+      <div class="group-label">Orientation</div>
+      <a href="#overview">Overview &amp; how to read this</a>
+
+      <div class="group-label">Session 1 — Days 1-7</div>
+      <a href="#s1-kickoff">Kickoff &amp; clarifying questions</a>
+      <a href="#s1-scaffold">Repo scaffold + Day 1-2</a>
+      <a href="#s1-split-bug">The split bug (Day 3)</a>
+      <a href="#s1-models">Days 4-7: baseline, XGBoost, LSTM</a>
+
+      <div class="group-label">Session 2 — Notebooks</div>
+      <a href="#s2-notebooks">10 teaching notebooks built + run</a>
+
+      <div class="group-label">Session 3 — Real data</div>
+      <a href="#s3-keys">API keys handed over</a>
+      <a href="#s3-harespod">Harespod: real bugs found</a>
+      <a href="#s3-pilot">The pilot dataset detour</a>
+      <a href="#s3-merge">Train-only merge decision</a>
+
+      <div class="group-label">Session 4 — Week 2 build</div>
+      <a href="#s4-day8">Day 8 — DataSource layer</a>
+      <a href="#s4-day9">Day 9 — LLM + guardrails</a>
+      <a href="#s4-day10">Day 10 — Telegram alerts</a>
+      <a href="#s4-day11">Day 11 — full pipeline + a real fix</a>
+      <a href="#s4-day12">Day 12 — Streamlit dashboard</a>
+
+      <div class="group-label">Session 5 — Day 13 investigation</div>
+      <a href="#s5-finding">The under-triage finding</a>
+      <a href="#s5-attempt1">Attempt 1: asymmetric tuning</a>
+      <a href="#s5-attempt2">Attempt 2: lower the gate</a>
+      <a href="#s5-conclusion">Why both failed, and what shipped</a>
+
+      <div class="group-label">Session 6 — Day 14 + docs</div>
+      <a href="#s6-day14">Day 14 — README + wrap-up</a>
+      <a href="#s6-this-doc">This documentation suite</a>
+
+      <div class="group-label">Reference</div>
+      <a href="#all-decisions">Every decision, in one table</a>
+      <a href="#all-bugs">Every bug found, in one table</a>
+
+      <button class="theme-toggle" onclick="toggleTheme()">◐ Toggle theme</button>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="doc-header" id="overview">
+      <div class="eyebrow">Reference document · written from the actual conversation transcript</div>
+      <h1 class="title">Chat Summary</h1>
+      <p class="lede">
+        This is the story of how the High-Altitude Medical Alert System got built, told in the order
+        it actually happened — across several separate working sessions. It is not a tidied-up
+        version of events: real bugs are described as they were found, fix attempts that failed are
+        kept in (not quietly erased), and every non-obvious decision is paired with the reasoning
+        given for it at the time. Read it top to bottom to understand not just <em>what</em> exists
+        in the repo today, but <em>why</em> it looks the way it does.
+      </p>
+      <div class="meta-row">
+        <span class="chip accent">6 working sessions</span>
+        <span class="chip">14-day build plan, fully complete</span>
+        <span class="chip">2 real bugs found + fixed in Harespod loading</span>
+        <span class="chip">2 fix attempts tried and reverted (Day 13)</span>
+        <span class="chip">78+ automated tests by the end</span>
+      </div>
+    </header>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s1-kickoff">
+      <div class="phase-head"><h2>Session 1 — Kickoff</h2><span class="phase-tag">start of project</span></div>
+      <p class="phase-sub">The user asked to read the CLAUDE.md file and the three architecture diagrams already sitting in the (otherwise empty) project folder, understand the intended system, and start building — asking questions if anything was unclear.</p>
+
+      <article class="file">
+        <h3 id="s1-kickoff-detail">What existed before any code was written</h3>
+        <p>The project folder contained exactly four files: <code>CLAUDE.md</code> (the full project brief) and three static HTML architecture diagrams (<code>01_system_architecture.html</code>, <code>02_project_phases.html</code>, <code>03_data_flow_diagram.html</code>). No source code, no data, no git repository yet.</p>
+        <p>Reading <code>CLAUDE.md</code> in full established the shape of the whole project before a single line of code was written:</p>
+        <ul>
+          <li><b>What it is:</b> a sensor-based early-warning prototype for high-altitude illness — AMS (Acute Mountain Sickness), HAPE (High-Altitude Pulmonary Edema), and HACE (High-Altitude Cerebral Edema) — combining an ML severity classifier, an LLM interpretation/chat layer, and a Telegram alert bot.</li>
+          <li><b>Explicit current scope:</b> software-only "Demo Mode." No physical hardware exists or would be built in this phase — everything runs on synthetic and replayed data behind a swappable interface, so a real Arduino could be dropped in later with zero changes to the rest of the pipeline.</li>
+          <li><b>The 14-day build plan:</b> Days 1-7 (data + ML foundation), Days 8-14 (integration, LLM, alerts, dashboard, testing, docs) — laid out day-by-day in <code>02_project_phases.html</code>.</li>
+          <li><b>Non-negotiable guardrails:</b> the LLM must never diagnose, override the ML classification, give dosing advice, or discourage seeking real medical help.</li>
+        </ul>
+
+        <div class="qa-card">
+          <div class="q">Four clarifying questions were asked before writing any code:</div>
+          <div class="a">
+            <ol style="margin:0">
+              <li>The Harespod dataset (the real sensor data CLAUDE.md names as the primary source) requires a manual browser download from Figshare — should the build wait for it, or proceed synthetic-first with a ready adapter?</li>
+              <li>Are the Groq (LLM) and Telegram API keys available now, or should those layers be built stub-first?</li>
+              <li>How should the 14-day plan be paced — all at once, one day at a time, or in week-sized chunks with check-ins?</li>
+              <li>Should the project be placed under git, and should a remote be created?</li>
+            </ol>
+          </div>
+        </div>
+        <p>The user chose the recommended option on all four: <b>synthetic-first with a ready Harespod adapter</b>, <b>graceful degradation</b> for both API keys (build now, wire in real keys whenever available), <b>Days 1-7 as one continuous unit</b> with a check-in before Week 2, and <b>local git only</b>, no remote yet.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s1-scaffold">
+      <div class="phase-head"><h2>Repo scaffold, Day 1-2</h2><span class="phase-tag">session 1</span></div>
+      <p class="phase-sub">Built the target repo structure exactly as CLAUDE.md specified, then the synthetic data generator.</p>
+
+      <article class="file">
+        <h3>What got built</h3>
+        <ul>
+          <li><code>src/config.py</code> — every shared constant (severity tiers, clinical thresholds, hysteresis config, split fractions) in one place, so nothing downstream invents its own copy of "what counts as Severe AMS."</li>
+          <li><code>src/data/harespod_loader.py</code> — written <em>before</em> the real data was downloaded, deliberately, against the dataset's documented schema. Designed so it could later be pointed at real files with no change to its output contract.</li>
+          <li><code>src/data/synth_data.py</code> — the synthetic vitals generator. Produces 400 simulated subjects across the 5 severity tiers, each with a <b>gradual sigmoid onset</b> (not an instant jump) because a model trained on step-function data would learn to detect abrupt jumps, not the gradual real-world deterioration this system needs to catch.</li>
+          <li><code>docs/lls_mapping.md</code> — the written clinical rationale mapping the Lake Louise Score (a symptom questionnaire, not a sensor reading) to sensor patterns per tier. This became the single source of truth every rule-based threshold in the codebase traces back to.</li>
+        </ul>
+        <div class="why-box"><b>Why write the Harespod loader before downloading Harespod:</b> the user's chosen "synthetic-first, adapter ready" plan meant Days 2-7 shouldn't block on a manual Figshare download. Writing the loader early, against the documented (not yet verified) schema, meant real data could be dropped in later purely as a data-availability event, not a code-design event.</div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s1-split-bug">
+      <div class="phase-head"><h2>The stratified-split bug</h2><span class="phase-tag">Day 3</span></div>
+      <p class="phase-sub">The first real bug of the project, caught before it could quietly corrupt every model trained afterward.</p>
+
+      <article class="file">
+        <div class="bug-box"><b>The bug:</b> the original <code>feature_engineering.py</code> split subjects into train/val/test by sorting all 120 synthetic subjects together and cutting 70/15/15 chronologically. With only ~5 subjects in the rarest tier (HACE risk), a single unlucky ordering put <b>every HACE-risk subject into the training set and zero into validation or test</b>. This wasn't a coding typo — it ran without error and produced a plausible-looking split. It would have silently made every reported metric for the most dangerous tier meaningless.</div>
+        <div class="fix-box"><b>The fix:</b> the split logic was rewritten to stratify by severity tier <em>first</em>, then apply the same chronological 70/15/15 cut <em>within each tier's own subject list</em>. This still respects "never randomly shuffle time-series data" (each tier's own subjects stay time-ordered) while guaranteeing every tier appears in every split. The subject count was also raised from 120 to 400 so each tier had enough subjects to split meaningfully.</div>
+        <p>This became <code>tests/test_pipeline.py::test_temporal_split_no_subject_overlap</code> — a permanent regression test guarding against this exact failure mode recurring.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s1-models">
+      <div class="phase-head"><h2>Days 4-7 — Baseline, XGBoost, LSTM</h2><span class="phase-tag">session 1</span></div>
+      <p class="phase-sub">Three severity classifiers, built in the order CLAUDE.md required (baseline first, always) and compared on identical held-out data.</p>
+
+      <article class="file">
+        <h3>Day 4 — Rule-based baseline</h3>
+        <p><code>src/models/rule_baseline.py</code> encodes the clinical thresholds from <code>docs/lls_mapping.md</code> directly as if/else logic — no learned parameters. This exists specifically as a floor: if a sophisticated model can't clearly beat a handful of hand-written rules, that signals a problem with the features or labels, not evidence the ML approach doesn't work.</p>
+
+        <h3>Day 5 — XGBoost ordinal classifier</h3>
+        <p>Trained as a <b>regressor</b> on the severity index as a continuous number (0.0-4.0), not a plain 5-class classifier — this is what makes the model ordinal-aware: predicting 3.7 for a true HACE-risk (4) case is a small loss, predicting 0.2 is a big one, whereas plain multi-class classification would score both mistakes identically. Continuous output is then converted to a discrete tier via tuned threshold cut-points.</p>
+
+        <h3>Day 6 — LSTM comparison model</h3>
+        <p>A small 2-layer PyTorch LSTM trained on raw 60-second vitals windows (not the hand-engineered trend features XGBoost sees) — built specifically to demonstrate the deep-learning alternative and let the two approaches be compared honestly, per CLAUDE.md's explicit "don't build a model zoo, but do build this one comparison" instruction.</p>
+
+        <h3>Day 7 — Model selection</h3>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Model</th><th>F1 (macro)</th><th>Mean Abs Tier Error</th><th>Under-triage rate</th></tr>
+            <tr><td>Rule-based baseline</td><td>0.285</td><td>0.819</td><td>0.309</td></tr>
+            <tr class="highlight"><td>XGBoost Ordinal (selected)</td><td>0.354</td><td>0.604</td><td>0.244</td></tr>
+            <tr><td>LSTM</td><td>0.397</td><td>0.701</td><td>0.203</td></tr>
+          </table>
+        </div>
+        <p>XGBoost was selected because it won on Mean Absolute Tier Error — the metric that best reflects real clinical cost, since it penalizes being "many tiers wrong" far more than "one tier wrong," unlike plain accuracy or F1.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s2-notebooks">
+      <div class="phase-head"><h2>Session 2 — Teaching notebooks</h2><span class="phase-tag blue">separate session</span></div>
+      <p class="phase-sub">The user came back and asked: convert every Days-1-7 Python file into notebook format with the same detailed line-by-line explanations, and asked why notebooks/ only had one file when src/ had so many.</p>
+
+      <article class="file">
+        <h3>The actual question, answered directly</h3>
+        <p><code>src/</code> is the production pipeline: one job per file, imported by other files, the code that actually runs. <code>notebooks/</code> is a separate, parallel teaching layer — one notebook per module, meant to be read and re-run interactively with the reasoning spelled out. Only one notebook existed because Days 1-7 moved fast under the user's "build straight through" pacing choice; the 1:1 notebook coverage hadn't been built yet.</p>
+        <p>Before building 8 notebooks' worth of content, one clarifying question was asked: should each notebook <b>import and call the real <code>src/</code> functions</b> (staying accurate as the code evolves), or contain the <b>full code copied inline</b> (fully self-contained, but a second copy that can drift)? The user chose importing from <code>src/</code>.</p>
+
+        <h3>What got built — 9 new notebooks, one per module</h3>
+        <p><code>02_config_walkthrough</code>, <code>03_synth_data_walkthrough</code>, <code>04_harespod_loader_walkthrough</code>, <code>05_feature_engineering_walkthrough</code>, <code>06_rule_baseline_walkthrough</code>, <code>07_metrics_walkthrough</code>, <code>08_xgb_ordinal_walkthrough</code>, <code>09_lstm_model_walkthrough</code>, <code>10_predict_severity_walkthrough</code> — each with real code cells, markdown explaining every non-obvious choice, and actually-executed outputs.</p>
+
+        <div class="bug-box"><b>A real bug found while executing every notebook end to end:</b> a <code>.std().round()</code> call failed with <code>AttributeError: 'float' object has no attribute 'round'</code>. In this environment's pandas 3.0, <code>Series.std()</code> returns a plain Python <code>float</code> rather than <code>numpy.float64</code>, which has no <code>.round()</code> method. Fixed by swapping to the builtin <code>round()</code> function. This was only caught because every notebook was actually run, not just written and assumed correct.</div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s3-keys">
+      <div class="phase-head"><h2>Session 3 — Real data + real API keys</h2><span class="phase-tag blue">separate session</span></div>
+      <p class="phase-sub">The user provided a Groq API key, a Telegram bot token + chat ID, and confirmed the Harespod dataset (and its GitHub repo) had been downloaded into the Raw folder.</p>
+
+      <article class="file">
+        <h3>Credentials verified live, not just saved</h3>
+        <p>Both keys were saved to a gitignored <code>.env</code> file, then actually exercised: Groq answered a real test prompt correctly; the Telegram bot's token was confirmed valid via <code>getMe</code>, and — after asking the user's permission first, since sending a live message is a real, externally-visible action — one real test message was sent and confirmed delivered.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s3-harespod">
+      <div class="phase-head"><h2>Harespod: inspecting the real download</h2><span class="phase-tag">session 3</span></div>
+      <p class="phase-sub">The loader written back in Session 1 was speculative — written against Harespod's <em>documented</em> schema before the files existed. Now the real archive could be inspected directly.</p>
+
+      <article class="file">
+        <h3>What the real files actually looked like</h3>
+        <p>15 usable subjects (not the initially-assumed count), in a <code>Data_Cons/</code> folder, with per-subject CSVs for heart rate, SpO2 saturation, pulse rate, and two 100Hz waveform files. Critically, the column names in the raw CSVs were unlabeled numbers — the real mapping (<code>spv</code> = SpO2 Sat, not the raw <code>spo</code> waveform file that superficially looked like it could be SpO2) was only confirmed by reading the actual BerryMed PM6100 device driver source code shipped alongside the data.</p>
+
+        <div class="bug-box"><b>Bug 1 — implausible rescale:</b> Harespod's signals are min-max normalized to <code>[0,1]</code> per subject, with the true original scale unrecoverable. The first rescale attempt mapped onto the device's documented raw collection range (SpO2/pulse 0-100, heart rate 0-250bpm) — this produced a subject with a <b>mean resting heart rate of 174bpm</b>, clearly wrong for someone at rest. Fixed by rescaling onto a physiologically-plausible range instead (SpO2 70-100%, HR 40-160bpm) — still an approximation, but one that produces numbers a real pulse oximeter would plausibly report.</div>
+
+        <div class="bug-box"><b>Bug 2 — an 8-hour GMT offset:</b> 6 of the 15 subjects had their <code>key_timestamp.txt</code> altitude markers recorded exactly 8 hours ahead of their vitals data's own timestamps — a mismatch the file's own header comments warned about ("device record time may be GMT... 8H different from local time") but which the original loader didn't account for. Unfixed, this would have silently produced a <b>constant altitude for the entire recording</b> instead of a real ascent profile, for those 6 subjects. Fixed by detecting the offset per-subject (comparing the first marker to the data's own start time) and correcting it before interpolating.</div>
+
+        <div class="bug-box"><b>Bug 3 — two per-subject format exceptions:</b> subject <code>314c</code>'s first altitude marker was labeled <code>"Start to Rec"</code> instead of a numeric altitude (handled as meaning the same 1500m first stage); subject <code>328a</code>'s protocol never reached the final 4000m stage, with its marker literally reading <code>"Did not rise to this altitude"</code> — handled by dropping that marker rather than fabricating a fake timestamp.</div>
+
+        <p>All three fixes are documented directly in <code>harespod_loader.py</code>'s own docstrings, not just in this summary — so anyone reading the code later sees the reasoning without needing this document.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s3-pilot">
+      <div class="phase-head"><h2>The pilot-altitude-dataset detour</h2><span class="phase-tag">session 3</span></div>
+      <p class="phase-sub">A real example of a promising lead that was investigated thoroughly and correctly ruled out — not silently abandoned, not forced to fit anyway.</p>
+
+      <article class="file">
+        <h3>Why a second dataset was even considered</h3>
+        <p>Harespod's rescale ambiguity prompted a search for a better real dataset. A newly-published "High-Altitude Pilot Physiological Monitoring Dataset" (2026, Figshare) looked promising: real absolute units confirmed by inspecting its raw CSVs directly (SpO2 88-100%, HR 43-179bpm — genuinely physiological numbers, no rescaling needed), a higher and more clinically-relevant altitude range (4500-7500m vs Harespod's 1500-4000m), and more subjects (20 vs 15). The user approved downloading and integrating it.</p>
+
+        <div class="bug-box"><b>The disqualifying finding:</b> after building a loader and running the labeling pipeline against it, the results were physiologically backwards — a healthy 98% SpO2 reading at 7500m was being flagged as <b>severely abnormal</b>, because the project's <code>expected_spo2()</code> reference curve assumes ambient air, where 7500m would predict ~75% SpO2. Investigating further (using the dataset's own O2/N2/CO2 gas-composition columns, which had been loaded but not yet used) revealed the pilots were breathing <b>oxygen-enriched air throughout (~40-45% O2, vs ~21% in normal atmosphere)</b> — a fundamentally different physiological scenario than the ambient-air hypoxia this whole project models.</div>
+
+        <p>Before concluding, Harespod itself was double-checked against the same question (in case <em>both</em> real datasets turned out to be oxygen-enriched) — its own paper's Methods section confirmed ambient air only, with real oxygen used solely as an emergency intervention. A broader web search was also run to check whether any better real, ambient-air, publicly-downloadable dataset existed at all — none did.</p>
+
+        <div class="decision-box"><b>Final decision:</b> the pilot dataset stays loaded (<code>src/data/pilot_altitude_loader.py</code>) and available for exploration, but is <b>excluded from severity labeling</b> — rule-labeling an oxygen-enriched dataset with ambient-air thresholds would have actively mislabeled it, not just approximated it.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s3-merge">
+      <div class="phase-head"><h2>The train-only merge decision</h2><span class="phase-tag">session 3</span></div>
+      <p class="phase-sub">A genuine circularity risk was caught before it could quietly invalidate every future model comparison.</p>
+
+      <article class="file">
+        <p>Neither real dataset comes with severity labels, so both had to be labeled post-hoc using the same rule-based thresholds <code>rule_baseline.py</code> uses as a <em>model</em>. If those rule-labeled rows ended up in the validation or test split, evaluating the rule-based baseline against them would be circular — it would trivially "predict" labels it generated itself, making the whole three-way model comparison meaningless for real-data rows.</p>
+        <div class="decision-box"><b>Decision (user-approved, with the alternative explicitly noted for later):</b> real, rule-labeled data is merged into the <b>training split only</b>. Validation and test stay 100% synthetic, whose labels come from the generator's own tier-driven simulation, never from <code>classify_row()</code> — so evaluating the rule baseline against them is never circular. A documented alternative (splitting real data across all three sets, and having the comparison function score the rule baseline only on synthetic rows) was written into the code as a note for later, not implemented.</div>
+        <p>Retraining XGBoost and the LSTM on the blended dataset showed both models improved somewhat from the added real signal — XGBoost remained the selected model.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s4-day8">
+      <div class="phase-head"><h2>Session 4 — Day 8: the DataSource layer</h2><span class="phase-tag gold">Week 2 begins</span></div>
+      <p class="phase-sub">The user asked to continue with the next phase of the 14-day plan. This session built Days 8 through 12 in one continuous run.</p>
+
+      <article class="file">
+        <p>An abstract <code>DataSource</code> interface (just two methods: <code>.next_reading()</code> and <code>.reset()</code>) with three concrete Demo Mode implementations: a scenario player (reusing the Day 2 synthetic trajectory simulator directly), a manual slider override, and a Harespod replay source. A <code>ReadingBuffer</code> class implements Stage 2 of the pipeline (rolling window + glitch rejection) sitting between any source and the feature engineering stage.</p>
+        <p>Every one of the three sources was tested end to end through the buffer, feature engineering, and model inference before moving on — not just unit-tested in isolation.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s4-day9">
+      <div class="phase-head"><h2>Day 9 — LLM interpretation, chat, guardrails</h2><span class="phase-tag gold">session 4</span></div>
+      <p class="phase-sub">One shared, guardrailed system prompt behind three functions: plain-language severity explanation, live chat, and structured-JSON alert content generation.</p>
+
+      <article class="file">
+        <p>The system prompt encodes all four of CLAUDE.md's non-negotiable rules explicitly (never diagnose, never override the ML classification, never give dosing advice, never discourage seeking real help) rather than relying on the model's own implicit judgment.</p>
+        <div class="fix-box"><b>Verified, not assumed:</b> the guardrails were tested directly with a real adversarial prompt — a user message insisting they felt fine despite an elevated classification, <em>and</em> directly asking for a specific medication dose. The model correctly refused to override the classification and correctly refused the dosing request, redirecting to "seek real medical attention" both times.</div>
+        <p>A templated, non-LLM fallback (matching the same guardrails, just hand-written instead of model-generated) activates automatically when no Groq key is present, or when a live call fails — which was actually observed later in testing, when Groq's free-tier daily token limit was hit from heavy same-day testing, and the fallback engaged cleanly instead of crashing.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s4-day10">
+      <div class="phase-head"><h2>Day 10 — Telegram alerts</h2><span class="phase-tag gold">session 4</span></div>
+      <p class="phase-sub">One shared alert-message format, a local JSONL log as both the offline fallback and a permanent record, and two real messages sent and confirmed delivered during testing.</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s4-day11">
+      <div class="phase-head"><h2>Day 11 — full pipeline integration</h2><span class="phase-tag gold">session 4</span></div>
+      <p class="phase-sub">The hysteresis gate and the <code>MedicalAlertPipeline</code> class that wires every prior piece together into one <code>.tick()</code> call.</p>
+
+      <article class="file">
+        <div class="bug-box"><b>A real design gap found while testing, not after shipping:</b> the first version called the LLM's <code>explain_severity()</code> on <em>every single tick</em>. In a live 1Hz loop, that means one Groq API call per second — impractical for cost, latency, and free-tier rate limits. This was caught by actually timing a full scenario run, which took far longer than expected.</div>
+        <div class="fix-box"><b>Fix:</b> the explanation is now cached and only regenerated when the severity <em>tier</em> changes, not on every tick. "Stage 6A - ALWAYS" in the data flow diagram was clarified to mean "always eligible, independent of the hysteresis gate" rather than "literally every tick regardless of cost."</div>
+        <p>The fixed pipeline was verified against a sustained HACE-risk scenario (fires exactly one alert, correctly de-duplicated by the 15-minute cooldown despite hundreds of consecutive elevated readings) and a Normal scenario (fires zero alerts).</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s4-day12">
+      <div class="phase-head"><h2>Day 12 — Streamlit dashboard</h2><span class="phase-tag gold">session 4</span></div>
+      <p class="phase-sub">The Demo Mode control panel, live vitals/severity charts, a chat tab, and an alert log tab — verified in an actual running browser, not just by reading the code.</p>
+
+      <article class="file">
+        <p>The app was launched for real and driven with Playwright (a headless browser automation tool) to click through every mode — scenario player, manual sliders, Harespod replay — and take screenshots at each step, checking the browser's console for JavaScript errors along the way.</p>
+        <div class="qa-card">
+          <div class="q">A moment that looked like a bug but wasn't:</div>
+          <div class="a">After only 5 "Step forward" clicks, the severity readout still showed the empty "start a Demo Mode source" placeholder text, and the charts showed empty "Infinite extent" console warnings. This looked broken. Stepping forward far enough to cross the model's minimum-history requirement (60 readings) resolved it completely — the severity readout, vitals snapshot, LLM explanation, and both charts all populated correctly. This was genuinely correct behavior (the model shouldn't classify off too little history), not a bug, and it became a permanent regression test in the automated suite (<code>streamlit.testing.v1.AppTest</code>) rather than something left to rediscover by accident later.</div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s5-finding">
+      <div class="phase-head"><h2>Session 5 — Day 13: testing &amp; a real safety finding</h2><span class="phase-tag accent">the most important investigation</span></div>
+      <p class="phase-sub">Continued from the previous session. All 15 real Harespod recordings were replayed through the complete pipeline (zero exceptions, zero rejected readings, correctly de-duplicated to one alert each), and six hand-crafted edge cases were tested directly.</p>
+
+      <article class="file">
+        <h3>Edge cases tested</h3>
+        <ul>
+          <li>An instantaneous step-function drop (not the gradual onset the model was trained on) — handled correctly.</li>
+          <li>Readings oscillating right at the alert-tier boundary — correctly never fired (a single dip resets the streak).</li>
+          <li>Exactly one reading short of the consecutive-streak requirement — correctly never fired.</li>
+          <li>Exactly the required streak length — correctly fired.</li>
+          <li>A physiologically-impossible sensor glitch (-999% SpO2) — correctly rejected by the buffer, no crash.</li>
+          <li>An empty/already-exhausted data source — correctly reported as exhausted, no crash.</li>
+        </ul>
+
+        <div class="bug-box"><b>The real finding:</b> on the held-out (pure synthetic) test set, <b>45% of true HAPE-risk/HACE-risk readings</b> received an XGBoost prediction <em>below</em> the hysteresis gate's alert-eligible tier (Severe AMS). Even with hysteresis working perfectly, the system would never even attempt a Telegram alert for nearly half of the most dangerous cases — because the classification feeding into the gate was itself under-confident on the rarest tiers, not because of any hysteresis-gate bug.</div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s5-attempt1">
+      <div class="phase-head"><h2>Fix attempt 1: asymmetric threshold tuning</h2><span class="phase-tag accent">tried and reverted</span></div>
+
+      <article class="file">
+        <p>The XGBoost threshold-tuning search was modified to penalize under-triage errors (predicting too mild) more heavily than over-triage errors of the same size — first at a 3x penalty weight.</p>
+        <div class="table-wrap">
+          <table>
+            <tr><th>Penalty weight</th><th>HAPE/HACE below alert gate</th><th>Normal scenarios falsely alerting</th></tr>
+            <tr><td>1.0 (original, symmetric)</td><td>45.0%</td><td>0 / 10 seeds</td></tr>
+            <tr><td>3.0</td><td>26.8%</td><td class="highlight" style="color:var(--accent)">10 / 10 seeds</td></tr>
+            <tr><td>1.5</td><td>33.3%</td><td class="highlight" style="color:var(--accent)">confirmed systematic by seed 3, stopped there</td></tr>
+          </table>
+        </div>
+        <div class="bug-box"><b>Why it failed:</b> biasing the threshold that separates Normal from Severe AMS pushes ordinary sensor noise on a genuinely Normal trajectory across that same line often enough to satisfy the 3-consecutive-reading hysteresis requirement. This isn't a tunable edge case — it's a direct, structural consequence of moving the boundary the gate depends on.</div>
+        <p>Reverted cleanly to weight 1.0. Verified on disk that the saved model thresholds and comparison numbers matched the pre-Day-13 baseline exactly, and that the specific test that had failed (<code>test_normal_scenario_never_fires_an_alert</code>) passed again, along with the full 67-test suite.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s5-attempt2">
+      <div class="phase-head"><h2>Fix attempt 2: lower the gate to Mild AMS</h2><span class="phase-tag accent">tried and reverted</span></div>
+
+      <article class="file">
+        <p>A different approach: leave the model's own classification thresholds untouched, and instead lower <code>HYSTERESIS_ALERT_TIER</code> from Severe AMS to Mild AMS — reasoning that this doesn't distort the model's calibration, just changes what the gate watches for.</p>
+        <p>This substantially improved coverage: only <b>9.7%</b> of true HAPE/HACE readings now fell below the new, lower gate (down from 45%). But checking the single-reading false-positive rate first (<b>38% of true-Normal readings already predict at/above Mild AMS individually</b>) was a warning sign, and a live Normal-scenario test confirmed it: the very first seed tested fired a false alert, matching the same systematic pattern as attempt 1.</p>
+        <div class="bug-box"><b>Why it failed:</b> this model was simply never trained/tuned to separate Normal from Mild AMS as tightly as it separates Normal from Severe AMS — so a large fraction of ordinary Normal-scenario noise already sits at or above Mild AMS, easily sustaining a 3-in-a-row streak.</div>
+        <p>Reverted back to Severe AMS. Re-verified: the full test suite passed, and both the false-alarm test and the sustained-danger-fires-an-alert test were explicitly re-run and confirmed individually, not just inferred from the aggregate pass count.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s5-conclusion">
+      <div class="phase-head"><h2>Why both attempts failed, and what actually shipped</h2><span class="phase-tag">conclusion</span></div>
+
+      <article class="file">
+        <p>Both fix attempts hit the same underlying wall: <b>this specific XGBoost model's calibration doesn't currently support catching more true danger without also catching more false alarms, at any tier boundary tried.</b> The system ships with the original, well-tested configuration — Severe AMS gate, symmetric threshold tuning — which is honestly biased toward fewer false alarms at the cost of missing some true elevated cases. This is documented as a known, real limitation in <code>docs/lls_mapping.md</code> and the README, with the two failed attempts described in enough detail that anyone revisiting this later doesn't have to rediscover the same dead ends. Real fixes that would need actual new work (not attempted here) are listed too: a model specifically trained to separate Normal from everything else more sharply, a second independent signal required to agree before alerting, or more real (non-synthetic) training data at exactly the Normal/Mild-AMS boundary where both attempts' false alarms concentrated.</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s6-day14">
+      <div class="phase-head"><h2>Session 6 — Day 14: README and wrap-up</h2><span class="phase-tag gold">final day of the 14-day plan</span></div>
+      <p class="phase-sub">A full README.md was written (setup with/without real data and API keys, how to run the pipeline/dashboard/tests, verified benchmark numbers pulled directly from the saved comparison file, and an honest Limitations section covering the under-triage gap, the synthesized temperature, Harespod's rescale approximation, and the fact that the LLM guardrails are prompt-based, not architecturally enforced).</p>
+      <p class="phase-sub">All three architecture diagrams were synced to reflect the finished 14-day build, and the work was committed locally (no remote was ever configured, matching the Day 1 decision, so nothing was pushed).</p>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="s6-this-doc">
+      <div class="phase-head"><h2>This documentation suite</h2><span class="phase-tag">you are here</span></div>
+      <p class="phase-sub">The user asked for a complete, interactive way to review the entire project — matching the style of a companion project's (CineMind's) interactive architecture explorer, data-flow explorer, and code walkthrough — plus this standalone chat narrative.</p>
+      <article class="file">
+        <p>Four files were built: this Chat Summary; <code>04_interactive_architecture.html</code> (clickable component explorer covering every layer, the dataset in full detail, and a complete glossary of every term used across the project); <code>05_interactive_dataflow.html</code> (the full sensor-to-alert pipeline as a step-by-step, animated explorer); and <code>06_code_walkthrough.html</code> (every module's actual code, cell by cell, with explanations and real outputs).</p>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="all-decisions">
+      <div class="phase-head"><h2>Every decision, in one table</h2></div>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Decision</th><th>Chosen</th><th>Why</th></tr>
+          <tr><td>Harespod availability</td><td>Synthetic-first, adapter ready</td><td>Don't block Days 2-7 on a manual download</td></tr>
+          <tr><td>API keys</td><td>Graceful degradation everywhere</td><td>Nothing should crash on a missing key</td></tr>
+          <tr><td>Build pacing</td><td>Days 1-7 as one unit, check in after</td><td>User's chosen cadence</td></tr>
+          <tr><td>Version control</td><td>Local git, no remote</td><td>User's explicit choice at kickoff</td></tr>
+          <tr><td>Notebook design</td><td>Import from src/, explain inline</td><td>Stays accurate as src/ evolves, avoids a drifting second copy</td></tr>
+          <tr><td>Real-data severity labeling</td><td>Reuse rule_baseline's thresholds post-hoc</td><td>One source of truth for "what counts as Severe AMS"</td></tr>
+          <tr><td>Harespod rescale range</td><td>Physiological range, not device raw range</td><td>Device range produced implausible numbers (174bpm resting HR)</td></tr>
+          <tr><td>Pilot altitude dataset</td><td>Loaded, excluded from labeling</td><td>Confirmed oxygen-enriched, not ambient air</td></tr>
+          <tr><td>Real data in train/val/test</td><td>Train split only</td><td>Avoids circular evaluation of the rule baseline</td></tr>
+          <tr><td>LLM explanation frequency</td><td>Per severity-tier-change, not per tick</td><td>Per-tick would mean 1 Groq call/second in a live loop</td></tr>
+          <tr><td>Under-triage fix (Day 13)</td><td>Neither attempt shipped; documented as a limitation</td><td>Both attempts caused false alerts on Normal scenarios</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <section class="phase" id="all-bugs">
+      <div class="phase-head"><h2>Every bug found, in one table</h2></div>
+      <div class="table-wrap">
+        <table>
+          <tr><th>Bug</th><th>Found by</th><th>Fix</th></tr>
+          <tr><td>Chronological split starved rare tiers</td><td>Inspecting split output before training</td><td>Stratify by tier, then split chronologically within each tier</td></tr>
+          <tr><td><code>.std().round()</code> AttributeError</td><td>Actually executing every notebook</td><td>Use builtin <code>round()</code> instead of <code>.round()</code></td></tr>
+          <tr><td>Device-range rescale gave 174bpm resting HR</td><td>Inspecting rescaled values directly</td><td>Rescale to a physiological range instead</td></tr>
+          <tr><td>8-hour GMT offset broke altitude for 6/15 subjects</td><td>Comparing marker times to data start times</td><td>Detect and correct the offset per-subject</td></tr>
+          <tr><td>Pilot dataset physiologically backwards</td><td>A 98% SpO2 reading at 7500m being flagged severe</td><td>Investigated gas columns, confirmed oxygen enrichment, excluded from labeling</td></tr>
+          <tr><td>LLM called every tick, not per tier-change</td><td>Timing a full scenario run</td><td>Cache the explanation, regenerate only on tier change</td></tr>
+          <tr><td>Asymmetric threshold tuning caused false alerts</td><td>A 10-seed Normal-scenario sweep</td><td>Reverted to symmetric tuning</td></tr>
+          <tr><td>Lowering the gate to Mild AMS also caused false alerts</td><td>Single-reading stat + a live scenario test</td><td>Reverted to Severe AMS gate</td></tr>
+        </table>
+      </div>
+    </section>
+
+    <footer>
+      High-Altitude Medical Alert System — Chat Summary · Companion to <code>04_interactive_architecture.html</code>, <code>05_interactive_dataflow.html</code>, and <code>06_code_walkthrough.html</code>
+    </footer>
+  </main>
+</div>
+
+<script>
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute("data-theme");
+  const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const now = cur ? cur : (sysDark ? "dark" : "light");
+  document.documentElement.setAttribute("data-theme", now === "dark" ? "light" : "dark");
+}
+</script>

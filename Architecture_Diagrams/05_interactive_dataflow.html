@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>High-Altitude Medical Alert System — Interactive Data Flow</title>
+<style>
+  :root {
+    --ground: #0B1520; --panel: #101E2E; --panel-2: #0D1926;
+    --ink: #EDF2F7; --muted: #8FA3B8; --faint: #54677D;
+    --line: rgba(143,163,184,0.16); --line-strong: rgba(143,163,184,0.30);
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    /* three lanes matching the static data-flow diagram's stage groupings */
+    --a: #2FB8A6; --a-bg: #0E2A26;     /* Stage 1-2: capture + validate */
+    --b: #E8A23D; --b-bg: #2E2110;     /* Stage 3-4: features + ML classify */
+    --c: #E8583D; --c-bg: #2E1712;     /* Stage 5-7: gate, LLM/alert, dashboard */
+    --font-display: "IBM Plex Sans", "Segoe UI", sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", "Cascadia Code", "Consolas", ui-monospace, monospace;
+  }
+  :root[data-theme="light"] {
+    --ground: #F4F3EE; --panel: #FFFFFF; --panel-2: #FAF9F5;
+    --ink: #191D24; --muted: #5A6473; --faint: #8A93A2;
+    --line: #E2E0D7; --line-strong: #CBC9BE;
+    --shadow: 0 1px 2px rgba(24,28,36,.05), 0 8px 24px rgba(24,28,36,.06);
+    --a: #1F9E88; --a-bg: #E6F6F1; --b: #B9860F; --b-bg: #FBF2DF; --c: #C8362A; --c-bg: #FBE7E4;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground: #F4F3EE; --panel: #FFFFFF; --panel-2: #FAF9F5;
+      --ink: #191D24; --muted: #5A6473; --faint: #8A93A2;
+      --line: #E2E0D7; --line-strong: #CBC9BE;
+      --shadow: 0 1px 2px rgba(24,28,36,.05), 0 8px 24px rgba(24,28,36,.06);
+      --a: #1F9E88; --a-bg: #E6F6F1; --b: #B9860F; --b-bg: #FBF2DF; --c: #C8362A; --c-bg: #FBE7E4;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--font-body); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+
+  .topbar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 16px; padding: 14px 26px;
+    background: color-mix(in srgb, var(--ground) 86%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .brand { display: flex; align-items: baseline; gap: 10px; cursor: pointer; user-select: none; }
+  .brand .logo { font-family: var(--font-display); font-weight: 700; font-size: 20px; position: relative; }
+  .brand .logo::after { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 3px; background: var(--c); border-radius: 2px; }
+  .brand .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: var(--faint); font-weight: 600; }
+  .crumbs { flex: 1; font-size: 13px; color: var(--muted); min-width: 140px; }
+  .crumbs b { color: var(--ink); font-weight: 600; }
+  .topbtn { border: 1px solid var(--line-strong); background: var(--panel); color: var(--muted); border-radius: 8px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  .topbtn:hover { color: var(--ink); border-color: var(--c); }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 26px 100px; }
+  .hero { padding: 26px 0 8px; }
+  .hero h1 { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.5px; font-size: clamp(32px, 5.5vw, 52px); line-height: 1.04; margin: 0 0 10px; text-wrap: balance; }
+  .hero h1 .rd { color: var(--c); }
+  .hero p.lede { font-size: 16px; color: var(--muted); max-width: 74ch; margin: 0; }
+  .hint { margin-top: 18px; font-size: 13px; color: var(--faint); display: inline-flex; align-items: center; gap: 8px; }
+  .hint .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c); animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:.35; transform:scale(.8)} 50%{opacity:1; transform:scale(1.15)} }
+
+  .lane { margin-top: 26px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: var(--shadow); overflow: hidden; }
+  .lane-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--lbg); flex-wrap: wrap; }
+  .lane-tag { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: #fff; background: var(--lc); padding: 3px 9px; border-radius: 6px; letter-spacing: .5px; }
+  .lane-name { font-weight: 700; font-size: 16px; }
+  .lane-when { margin-left: auto; font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+  .steps { padding: 8px; }
+  .step { width: 100%; text-align: left; cursor: pointer; font-family: inherit; display: grid; grid-template-columns: 40px 1fr auto;
+    align-items: center; gap: 14px; padding: 13px 14px; border: 1px solid transparent; border-radius: 11px; background: transparent; transition: background .12s, border-color .12s, transform .1s; }
+  .step:hover { background: var(--panel-2); border-color: var(--lc); transform: translateX(3px); }
+  .step .num { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-family: var(--font-mono); font-weight: 700; font-size: 13px; color: #fff; background: var(--lc); }
+  .step .stitle { font-weight: 700; font-size: 14.5px; }
+  .step .sdesc { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .step .sarrow { color: var(--faint); font-size: 18px; }
+  .step .sio { font-family: var(--font-mono); font-size: 10.5px; color: var(--lc); font-weight: 600; margin-top: 4px; }
+
+  .connector { display: flex; align-items: center; gap: 12px; padding: 6px 26px; color: var(--faint); font-size: 12px; }
+  .connector .l { flex: 1; height: 1px; background: repeating-linear-gradient(90deg,var(--line-strong) 0 6px,transparent 6px 12px); }
+
+  .detail { display: none; }
+  .detail.active { display: block; animation: fade .25s ease; }
+  .map.hidden { display: none; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px);} to {opacity:1; transform:none;} }
+  .back { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; background: none; border: none; color: var(--muted); font-weight: 600; font-size: 13.5px; padding: 4px 0; margin-bottom: 6px; font-family: inherit; }
+  .back:hover { color: var(--c); }
+  .dhead { display: flex; align-items: flex-start; gap: 16px; margin: 6px 0 8px; flex-wrap: wrap; }
+  .dhead .dic { width: 58px; height: 58px; flex: none; border-radius: 14px; display: grid; place-items: center; font-family: var(--font-mono); font-weight: 700; font-size: 22px; color: #fff; background: var(--lc); }
+  .dhead h2 { font-family: var(--font-display); font-weight: 700; font-size: clamp(26px, 4vw, 38px); margin: 2px 0 4px; line-height: 1.05; }
+  .dhead .dsub { color: var(--muted); font-size: 15px; max-width: 60ch; }
+  .dhead .dtool { display: inline-block; margin-top: 8px; font-family: var(--font-mono); font-size: 12px; color: #fff; background: var(--lc); padding: 3px 9px; border-radius: 6px; }
+  .dcols { display: grid; grid-template-columns: 1fr; gap: 22px; margin-top: 22px; }
+  @media (min-width: 860px) { .dcols { grid-template-columns: 1.05fr .95fr; } }
+  .card { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); padding: 20px 22px; margin-bottom: 18px; }
+  .card h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--faint); margin: 0 0 12px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .card h3::before { content: ""; width: 14px; height: 2px; background: var(--lc, var(--c)); }
+  .card p { margin: 0 0 12px; font-size: 14.5px; }
+  .card p:last-child { margin-bottom: 0; }
+  .card .q { color: var(--muted); }
+  .card strong { color: var(--ink); }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 13.5px; }
+  .kv dt { color: var(--faint); font-weight: 600; font-family: var(--font-mono); font-size: 12px; }
+  .kv dd { margin: 0; }
+  code { font-family: var(--font-mono); font-size: 12.5px; background: var(--panel-2); padding: 1.5px 6px; border-radius: 5px; border: 1px solid var(--line); }
+  .figure { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); padding: 16px; }
+  @media (min-width: 860px) { .figure { position: sticky; top: 78px; max-height: calc(100vh - 94px); overflow-y: auto; } }
+  .figure .ftitle { font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--faint); font-weight: 700; margin-bottom: 4px; }
+  .figure .fnote { font-size: 12.5px; color: var(--muted); min-height: 34px; margin-top: 10px; }
+  .btnrow { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .fbtn { border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--ink); border-radius: 8px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .fbtn:hover { border-color: var(--c); }
+  .fbtn.primary { background: var(--c); color: #fff; border-color: var(--c); }
+  .related { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 600; border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--muted); padding: 6px 11px; border-radius: 20px; }
+  .chip:hover { color: var(--c); border-color: var(--c); }
+  .prevnext { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; }
+  .pn { flex: 1; cursor: pointer; font-family: inherit; text-align: left; border: 1px solid var(--line); background: var(--panel-2); border-radius: 11px; padding: 11px 14px; }
+  .pn:hover { border-color: var(--c); }
+  .pn.next { text-align: right; }
+  .pn .pnl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--faint); font-weight: 700; }
+  .pn .pnt { font-weight: 700; font-size: 13.5px; margin-top: 2px; }
+  .pn.dim { opacity: .35; pointer-events: none; }
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12.5px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 22px 0 4px; }
+  .legend .li { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+  .legend .sw { width: 12px; height: 12px; border-radius: 3px; }
+  .disclaimer { margin-top: 16px; padding: 10px 14px; background: var(--b-bg); border: 1px solid var(--b); border-radius: 8px; font-size: 12.5px; color: var(--b); }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand" onclick="showMap()">
+    <span class="logo">🏔 ALTITUDE ALERT</span>
+    <span class="kicker">Data-Flow Explorer</span>
+  </div>
+  <div class="crumbs" id="crumbs"><b>End-to-end flow</b> — click any step</div>
+  <button class="topbtn" onclick="location.href='04_interactive_architecture.html'">Architecture ↗</button>
+  <button class="topbtn" onclick="location.href='03_data_flow_diagram.html'">Static diagram ↗</button>
+  <button class="topbtn" onclick="toggleTheme()">◐ Theme</button>
+</div>
+
+<div class="wrap map" id="mapView">
+  <div class="hero">
+    <h1>How one reading moves through the <span class="rd">Alert System</span></h1>
+    <p class="lede">Follow a single sensor reading from the moment it's produced (synthetic scenario, manual
+      slider, or a real replayed recording) through validation, feature engineering, ML classification,
+      the hysteresis gate, LLM interpretation, alert dispatch, and finally onto the dashboard. Every step
+      is clickable, and every step is the exact sequence <code>MedicalAlertPipeline.tick()</code> actually runs.</p>
+    <div class="hint"><span class="dot"></span> Three lanes: capture &amp; validate, understand &amp; classify, decide &amp; act.</div>
+    <div class="disclaimer">⚠ Demo Mode only — no physical hardware exists yet. Every reading in this flow originates from a synthetic scenario, a manual slider, or a replayed real recording.</div>
+  </div>
+
+  <div class="legend">
+    <span class="li"><span class="sw" style="background:var(--a)"></span>Lane A · Capture &amp; validate (Stages 1-2)</span>
+    <span class="li"><span class="sw" style="background:var(--b)"></span>Lane B · Understand &amp; classify (Stages 3-4)</span>
+    <span class="li"><span class="sw" style="background:var(--c)"></span>Lane C · Decide &amp; act (Stages 5-7)</span>
+  </div>
+
+  <div id="lanes"></div>
+
+  <div class="footer">
+    <span>High-Altitude Medical Alert System — one .tick() call runs this entire sequence.</span>
+    <span>Interactive companion to <code>03_data_flow_diagram.html</code></span>
+  </div>
+</div>
+
+<div class="wrap detail" id="detailView"></div>
+
+<script>
+/* ---------- lanes + ordered steps ---------- */
+const LANES = [
+  { id:"a", tag:"A", name:"Capture & validate", when:"Stages 1-2 · every reading",
+    steps:["source","buffer"] },
+  { id:"b", tag:"B", name:"Understand & classify", when:"Stages 3-4 · once enough history exists",
+    steps:["features","classify"] },
+  { id:"c", tag:"C", name:"Decide & act", when:"Stages 5-7 · every classified reading",
+    steps:["gate","explain","alert","dashboard"] },
+];
+
+const S = {
+  /* -------- Lane A -------- */
+  source: { n:1, lane:"a", icon:"01", title:"A reading is produced", tool:"DataSource.next_reading()",
+    sub:"Scenario player, manual sliders, or a real replayed Harespod recording.",
+    io:"(nothing)  →  {timestamp, spo2, hr, temp, altitude}",
+    what:"Every reading in this system, in the current Demo Mode phase, comes from one of three sources behind a shared interface: a pre-generated synthetic scenario trajectory, live manual slider values, or a real Harespod subject's recording being replayed second by second.",
+    how:"All three implement the exact same two-method <code>DataSource</code> contract — <code>next_reading()</code> and <code>reset()</code>. The scenario player reuses the training-data generator directly; manual override just returns whatever the sliders currently say; replay steps through a real subject's actual recorded values.",
+    role_:"This is the ONLY place a future real-hardware source (an Arduino reader, not built in this phase) would plug in — everything downstream never needs to know or care which of the three current sources produced a given reading.",
+    why:"Building against this interface from Day 8 is what makes a future hardware phase a drop-in swap instead of a rewrite — a standing, explicit instruction in this project's CLAUDE.md.",
+    fig:"sources", related:["buffer","dashboard"] },
+  buffer: { n:2, lane:"a", icon:"02", title:"Buffer & validate", tool:"ReadingBuffer.add()",
+    sub:"A rolling 10-minute window, glitches rejected before they reach any model.",
+    io:"1 reading  →  validated / rejected, buffer updated",
+    what:"The new reading is checked against physiologically-impossible bounds (e.g. SpO2 must be within 0-100%) and, if valid, appended to a rolling 10-minute window. If invalid, it's silently rejected and a counter increments — no exception, no crash.",
+    how:"Backed by a <code>collections.deque(maxlen=...)</code> so the oldest reading automatically falls off as a new one arrives once the window is full — genuinely rolling, never manually trimmed.",
+    role_:"Every source funnels through exactly this one buffer implementation before feature engineering ever sees a reading — validation logic exists in exactly one place, regardless of which source produced the data.",
+    why:"Verified directly during Day 13 testing: a synthetic -999% SpO2 glitch injected mid-stream was rejected cleanly with zero crash and zero effect on the buffer's other contents.",
+    fig:"bufferfig", related:["source","features"] },
+
+  /* -------- Lane B -------- */
+  features: { n:3, lane:"b", icon:"03", title:"Feature engineering", tool:"engineer_features()",
+    sub:"Raw vitals → 5 trend/deviation features, once 60+ readings exist.",
+    io:"buffered readings  →  spo2_delta, trend, ascent_rate, time_at_altitude",
+    what:"Computes the same 5 engineered features used at training time: SpO2 trend, HR trend, ascent rate, SpO2 deviation from the altitude-expected value, and cumulative time spent at risk-relevant altitude.",
+    how:"Requires a minimum amount of buffered history (60 readings, ~1 minute) before it produces a meaningful result — with fewer readings, trend features would just be zero/undefined, which would be a meaningless input to a model trained on real trends.",
+    role_:"The EXACT SAME function runs at training time and live-inference time — this is deliberate, so training and serving can never silently drift into two different definitions of 'trend.'",
+    why:"<code>spo2_delta</code> (deviation from altitude-expected SpO2, not raw SpO2) turned out to be the single most important feature to every model — exactly matching the clinical reasoning in docs/lls_mapping.md.",
+    fig:"featurefig", related:["buffer","classify"] },
+  classify: { n:4, lane:"b", icon:"04", title:"ML severity classification", tool:"predict_severity() → XGBoost Ordinal",
+    sub:"5-tier ordinal prediction + a confidence proxy.",
+    io:"5 features  →  {severity_label, severity_index, confidence}",
+    what:"The selected model (XGBoost, trained as an ordinal regressor) converts the engineered features into one of 5 severity tiers, plus a confidence proxy — how close the underlying continuous prediction sits to the center of its bin versus an edge.",
+    how:"Internally: the model outputs a continuous number (0.0-4.0), which 4 tuned threshold cut-points convert into a discrete tier. The rule-based baseline and LSTM exist as comparisons but are never called in the live pipeline — only the selected model is.",
+    role_:"This is the single number the rest of the pipeline (hysteresis gate, LLM prompt, dashboard) treats as ground truth — the LLM is explicitly instructed to interpret this number, never invent its own assessment.",
+    why:"This is also where the Day 13 finding lives: 45% of true HAPE/HACE-risk readings predict below the alert-eligible tier — a real, documented limitation of this specific model's calibration, not a bug in this step's code.",
+    fig:"classifyfig", related:["features","gate"] },
+
+  /* -------- Lane C -------- */
+  gate: { n:5, lane:"c", icon:"05", title:"Hysteresis gate", tool:"HysteresisGate.evaluate()",
+    sub:"A single elevated reading must never fire an alert. Two conditions, both required.",
+    io:"severity_index  →  True/False (fire an alert now?)",
+    what:"Decides WHETHER an alert should fire this tick — not how to send one, which is a deliberately separate module.",
+    how:"Requires severity at/above the alert-eligible tier (Severe AMS) for 3 CONSECUTIVE readings — any single dip resets the streak to zero — AND at least 15 minutes since the last alert actually fired.",
+    role_:"This is the subject of the entire Day 13 investigation: two different fix attempts (biasing the model's own thresholds, and lowering this gate's tier to Mild AMS) both caused false alerts on genuinely Normal scenarios and were reverted — the gate itself was never the problem.",
+    why:"Verified directly: a sustained HACE-risk scenario correctly fires exactly ONE alert (not one per reading) despite 1200+ consecutive elevated readings, thanks to the cooldown; a Normal scenario correctly fires zero.",
+    fig:"gatefig", related:["classify","alert"] },
+  explain: { n:6, lane:"c", icon:"06", title:"LLM interpretation", tool:"explain_severity() · Groq Llama 3.3 70B",
+    sub:"Always eligible, independent of the gate — but cached per tier-change, not per tick.",
+    io:"severity + vitals  →  plain-language explanation",
+    what:"Turns the severity classification and current vitals into a calm, plain-language explanation for the dashboard — always computed, regardless of whether the hysteresis gate passes this tick.",
+    how:"The ML classification is ALWAYS passed in as ground truth; the LLM explains it, never invents its own assessment. A real design gap was found and fixed here: calling this on every single tick would mean one Groq API call per second in a live loop — impractical for cost, latency, and rate limits — so the explanation is now cached and only regenerated when the severity TIER changes.",
+    role_:"Built on a shared, guardrailed system prompt with 4 non-negotiable rules (never diagnose, never override the classification, never give dosing advice, never discourage seeking real help) — verified directly against real adversarial user pressure.",
+    why:"Falls back to a templated (but equally guardrailed) explanation if no Groq key is set, or if a live call fails — observed for real during testing when Groq's free-tier daily limit was hit.",
+    fig:"explainfig", related:["classify","alert","gate"] },
+  alert: { n:7, lane:"c", icon:"07", title:"Telegram alert (if gate passes)", tool:"generate_alert_content() + send_alert()",
+    sub:"Structured JSON summary → one formatted message → a real Telegram chat.",
+    io:"gate=True  →  Telegram message sent (or logged locally)",
+    what:"Only runs when the hysteresis gate passes. Generates a SEPARATE, structured-JSON LLM summary (not a reuse of the free-text explanation — CLAUDE.md's structured-output requirement applies specifically here), then formats and sends one Telegram message: severity, vitals snapshot, LLM summary, timestamp.",
+    how:"python-telegram-bot's async API is wrapped in <code>asyncio.run()</code> so the rest of this synchronous pipeline never needs to become async. Every attempt — sent or not — is appended to a local JSONL log, which is both the offline fallback AND the dashboard's alert-log data source.",
+    role_:"The very last active decision point in the pipeline — everything before this is preparation, this is the one step with a real, external, human-visible side effect.",
+    why:"Verified with two real messages sent to a real Telegram chat during development and confirmed delivered — not mocked.",
+    fig:"alertfig", related:["gate","explain","dashboard"] },
+  dashboard: { n:8, lane:"c", icon:"08", title:"Dashboard renders", tool:"Streamlit — src/app/streamlit_app.py",
+    sub:"Severity readout, live charts, chat, alert log — the one thing a user sees.",
+    io:"full tick result  →  rendered UI",
+    what:"Everything produced by this tick — the reading, the classification, the explanation, whether an alert fired — is rendered: a severity readout card, live vitals + severity-index charts, and (in their own tabs) a chat interface and the alert log.",
+    how:"<code>st.session_state</code> persists the whole <code>MedicalAlertPipeline</code> instance across Streamlit's rerun-the-whole-script-per-click model — without this, the hysteresis gate's accumulated streak would silently reset on every single click.",
+    role_:"The end of one full cycle — and the loop closes back to Lane A's step 1 for the next reading, whether driven by a 'Step forward' click or auto-play.",
+    why:"Verified in a real running browser via Playwright, including a real moment that looked like a bug (severity stayed blank after only 5 steps) but was correct behavior — the model needs 60 readings of history first. That became a permanent automated test.",
+    fig:"dashboardfig", related:["alert","explain","source"] },
+};
+
+const ORDER = [];
+LANES.forEach(l => l.steps.forEach(s => ORDER.push(s)));
+
+function lc(l){ return `var(--${l})`; }
+function lbg(l){ return `var(--${l}-bg)`; }
+
+function buildLanes(){
+  const host=document.getElementById("lanes");
+  host.innerHTML = LANES.map((l,li)=>{
+    const steps = l.steps.map(id=>{
+      const s=S[id];
+      return `<button class="step" style="--lc:${lc(l.id)}" onclick="openStep('${id}')">
+        <span class="num">${s.icon}</span>
+        <span><span class="stitle">${s.title}</span><div class="sdesc">${s.sub}</div><div class="sio">${s.io}</div></span>
+        <span class="sarrow">→</span>
+      </button>`;
+    }).join("");
+    const conn = li<LANES.length-1 ? `<div class="connector"><div class="l"></div><span>then</span><div class="l"></div></div>`:"";
+    return `<section class="lane" style="--lc:${lc(l.id)};--lbg:${lbg(l.id)}">
+      <div class="lane-head"><span class="lane-tag">${l.tag}</span><span class="lane-name">${l.name}</span><span class="lane-when">${l.when}</span></div>
+      <div class="steps">${steps}</div>
+    </section>${conn}`;
+  }).join("");
+}
+
+function openStep(id){
+  const s=S[id]; const view=document.getElementById("detailView");
+  const kv = s.io ? `<dt>in → out</dt><dd>${s.io}</dd>` : "";
+  const related = s.related.map(r=>`<button class="chip" onclick="openStep('${r}')">${S[r].icon} ${S[r].title}</button>`).join("");
+  const idx=ORDER.indexOf(id);
+  const prev=ORDER[idx-1], next=ORDER[idx+1];
+  const prevBtn = prev ? `<button class="pn" onclick="openStep('${prev}')"><div class="pnl">← Previous</div><div class="pnt">${S[prev].title}</div></button>`
+                       : `<button class="pn dim"><div class="pnl">Start</div><div class="pnt">—</div></button>`;
+  const nextBtn = next ? `<button class="pn next" onclick="openStep('${next}')"><div class="pnl">Next →</div><div class="pnt">${S[next].title}</div></button>`
+                       : `<button class="pn next dim"><div class="pnl">End of one tick</div><div class="pnt">loops back to step 1</div></button>`;
+
+  view.innerHTML = `
+    <button class="back" onclick="showMap()">← Full flow</button>
+    <div class="dhead" style="--lc:${lc(s.lane)};--lbg:${lbg(s.lane)}">
+      <div class="dic">${s.icon}</div>
+      <div><h2>${s.title}</h2><div class="dsub">${s.sub}</div><span class="dtool">${s.tool}</span></div>
+    </div>
+    <div class="dcols">
+      <div>
+        <div class="card" style="--lc:${lc(s.lane)}"><h3>What happens</h3><p class="q">${s.what}</p></div>
+        <div class="card" style="--lc:${lc(s.lane)}"><h3>How it works</h3><p class="q">${s.how}</p></div>
+        <div class="card" style="--lc:${lc(s.lane)}"><h3>Its role in the flow</h3><p class="q">${s.role_}</p></div>
+        <div class="card" style="--lc:${lc(s.lane)}"><h3>Why it matters</h3><p class="q">${s.why}</p></div>
+      </div>
+      <div>
+        <div class="figure" style="--lc:${lc(s.lane)}">
+          <div class="ftitle">Interactive · ${s.title}</div>
+          <div class="figstage" id="figstage"></div>
+          <div class="fnote" id="fnote"></div>
+          <div class="btnrow" id="figbtns"></div>
+        </div>
+        <div class="card" style="--lc:${lc(s.lane)}"><h3>Data in / out</h3><dl class="kv">${kv}</dl></div>
+        <div class="card" style="--lc:${lc(s.lane)}"><h3>Connects to</h3><div class="related">${related}</div></div>
+      </div>
+    </div>
+    <div class="prevnext">${prevBtn}${nextBtn}</div>
+    <div class="footer"><span>Step: ${s.title}</span><span>Data-Flow Explorer</span></div>
+  `;
+  document.getElementById("crumbs").innerHTML=`<b>${s.title}</b> — ${s.tool}`;
+  document.getElementById("mapView").classList.add("hidden");
+  view.classList.add("active");
+  window.scrollTo({top:0,behavior:"instant"});
+  if(FIGS[s.fig]) FIGS[s.fig](document.getElementById("figstage"),document.getElementById("fnote"),document.getElementById("figbtns"));
+  location.hash=id;
+}
+function showMap(){
+  document.getElementById("detailView").classList.remove("active");
+  document.getElementById("mapView").classList.remove("hidden");
+  document.getElementById("crumbs").innerHTML=`<b>End-to-end flow</b> — click any step`;
+  if(location.hash) history.replaceState(null,"",location.pathname);
+  window.scrollTo({top:0,behavior:"instant"});
+}
+
+/* ---------- figures ---------- */
+const FIGS={};
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function makeCanvas(stage,h){ stage.innerHTML=""; const c=document.createElement("canvas");
+  const w=stage.clientWidth||360; const dpr=Math.min(window.devicePixelRatio||1,2);
+  c.width=w*dpr; c.height=h*dpr; c.style.width="100%"; c.style.height=h+"px";
+  const ctx=c.getContext("2d"); ctx.scale(dpr,dpr); stage.appendChild(c); return {c,ctx,w,h}; }
+function btn(host,label,fn,primary){ const b=document.createElement("button");
+  b.className="fbtn"+(primary?" primary":""); b.textContent=label; b.onclick=fn; host.appendChild(b); return b; }
+
+/* --- 3 data sources --- */
+FIGS.sources = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const wrap = document.createElement("div"); wrap.style.cssText = "display:flex;flex-direction:column;gap:8px";
+  const opts = [
+    ["🎬 Scenario player", "5 pre-built tiers, reusing the training-data generator", "var(--a)"],
+    ["🎚️ Manual sliders", "Live SpO2/HR/temp/altitude values, for edge cases", "var(--b)"],
+    ["⏮️ Harespod replay", "A real subject's actual recorded vitals, second by second", "var(--c)"],
+  ];
+  let active = 0;
+  const render = () => {
+    wrap.innerHTML = "";
+    opts.forEach((o,i)=>{ const d=document.createElement("button");
+      d.style.cssText = "text-align:left;padding:12px 14px;border-radius:9px;cursor:pointer;font-family:inherit;border:1px solid "+(i===active?o[2]:"var(--line)")+
+        ";background:"+(i===active?"var(--panel-2)":"transparent");
+      d.innerHTML = `<div style="font-weight:700;font-size:13px">${o[0]}</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px">${o[1]}</div>`;
+      d.onclick = () => { active=i; render(); note.textContent = "Selected: "+o[0]+" — all three implement the exact same next_reading()/reset() contract."; };
+      wrap.appendChild(d); });
+  };
+  render();
+  stage.appendChild(wrap);
+  note.textContent = "Click each source — the pipeline downstream never knows or cares which one produced a reading.";
+};
+
+/* --- rolling buffer --- */
+FIGS.bufferfig = (stage, note, btns) => {
+  const {ctx,w,h} = makeCanvas(stage, 180);
+  let t=0, raf;
+  const draw = () => {
+    ctx.clearRect(0,0,w,h);
+    const a=cssv("--a"), c=cssv("--c"), faint=cssv("--faint");
+    const n=30, x0=15, x1=w-15, y=90;
+    for(let i=0;i<n;i++){
+      const x = x0+(x1-x0)*(i/(n-1));
+      const inWindow = i >= (t%12);
+      const isGlitch = i === 20 && Math.floor(t/24)%2===0;
+      ctx.fillStyle = isGlitch ? c : a;
+      ctx.globalAlpha = inWindow || isGlitch ? 1 : 0.15;
+      ctx.beginPath(); ctx.arc(x,y,5,0,7); ctx.fill(); ctx.globalAlpha=1;
+    }
+    ctx.fillStyle=faint; ctx.font="10px "+cssv("--font-mono"); ctx.textAlign="left";
+    ctx.fillText("rolling 10-min window — oldest drops off the left", x0, 30);
+    ctx.fillStyle=c; ctx.fillText("red = glitch, rejected here, never reaches the model", x0, 140);
+    t++; raf=requestAnimationFrame(draw);
+  };
+  draw();
+  note.textContent = "A deque(maxlen=...) automatically drops the oldest reading — genuinely rolling, never manually trimmed.";
+  stage._stop = () => cancelAnimationFrame(raf);
+};
+
+/* --- feature engineering --- */
+FIGS.featurefig = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const feats = [
+    ["spo2_delta", "Actual SpO2 − altitude-expected SpO2", 1.0],
+    ["time_at_altitude_min", "Minutes spent at risk-relevant altitude", 0.85],
+    ["spo2_trend_5min", "Slope of SpO2 over trailing 5 minutes", 0.45],
+    ["ascent_rate", "Meters of altitude gained per minute", 0.35],
+    ["hr_trend_5min", "Slope of heart rate over trailing 5 minutes", 0.25],
+  ];
+  const wrap = document.createElement("div"); wrap.style.cssText = "display:flex;flex-direction:column;gap:10px";
+  feats.forEach(([name,desc,imp])=>{ const row = document.createElement("div");
+    row.innerHTML = `<div style="display:flex;justify-content:space-between;font-family:${cssv('--font-mono')};font-size:11.5px;margin-bottom:3px">
+      <span style="color:var(--ink);font-weight:700">${name}</span><span style="color:var(--b)">${(imp*100).toFixed(0)}%</span></div>
+      <div style="height:8px;border-radius:4px;background:var(--panel-2);overflow:hidden">
+        <div style="height:100%;width:${imp*100}%;background:var(--b);border-radius:4px"></div></div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:3px">${desc}</div>`;
+    wrap.appendChild(row); });
+  stage.appendChild(wrap);
+  note.textContent = "Relative feature importance from the trained XGBoost model — spo2_delta and time_at_altitude_min dominate, matching clinical intuition.";
+};
+
+/* --- classification --- */
+FIGS.classifyfig = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const tiers = ["Normal","Mild AMS","Severe AMS","HAPE risk","HACE risk"];
+  const colors = ["var(--a)","var(--a)","var(--b)","var(--c)","var(--c)"];
+  let selected = 2;
+  const wrap = document.createElement("div"); wrap.style.cssText = "display:flex;flex-direction:column;gap:6px";
+  const render = () => {
+    wrap.innerHTML = "";
+    tiers.forEach((t,i)=>{ const d = document.createElement("button");
+      d.style.cssText = "text-align:left;padding:10px 14px;border-radius:8px;cursor:pointer;font-family:inherit;border:1px solid "+(i===selected?colors[i]:"var(--line)")+
+        ";background:"+(i===selected?"var(--panel-2)":"transparent")+";display:flex;justify-content:space-between;align-items:center";
+      d.innerHTML = `<span style="font-weight:700;font-size:12.5px">${i} — ${t}</span>${i===selected?'<span style="font-family:'+cssv('--font-mono')+';font-size:11px;color:'+colors[i]+'">selected</span>':''}`;
+      d.onclick = () => { selected=i; render(); note.textContent = `Tier ${i} (${t}) selected as ground truth for the next stages — hysteresis, LLM explanation, and alert all treat this as fact.`; };
+      wrap.appendChild(d); });
+  };
+  render();
+  stage.appendChild(wrap);
+  note.textContent = "Click a tier — this is the discrete output predict_severity() returns after threshold-binning XGBoost's continuous regression output.";
+};
+
+/* --- hysteresis gate interactive --- */
+FIGS.gatefig = (stage, note, btns) => {
+  const {ctx,w,h} = makeCanvas(stage, 220);
+  let readings = [], cooldownTicks = 0;
+  for(let i=0;i<15;i++) readings.push(false);
+  const draw = () => {
+    ctx.clearRect(0,0,w,h);
+    const c=cssv("--c"), a=cssv("--a"), ink=cssv("--ink");
+    const x0=15, x1=w-15, y=100;
+    let streak=0, fired=false;
+    readings.forEach((r,i)=>{
+      const x = x0+(x1-x0)*(i/39);
+      streak = r ? streak+1 : 0;
+      if(streak>=3 && cooldownTicks<=0){ fired=true; }
+      ctx.fillStyle = r ? c : a; ctx.globalAlpha = 0.9;
+      ctx.beginPath(); ctx.arc(x,y,4,0,7); ctx.fill(); ctx.globalAlpha=1;
+    });
+    ctx.fillStyle=ink; ctx.font="600 12px "+cssv("--font-body"); ctx.textAlign="left";
+    ctx.fillText("Streak: "+streak+" / 3 required"+(cooldownTicks>0?"  ·  cooldown active":""), x0, 24);
+    if(fired){ ctx.fillStyle=c; ctx.font="700 13px "+cssv("--font-mono"); ctx.fillText("🚨 ALERT FIRES", x0, 50); cooldownTicks=20; }
+    if(cooldownTicks>0) cooldownTicks--;
+  };
+  draw();
+  note.textContent = "Click 'Elevated' 3 times in a row to fire; any 'Normal' resets the streak; firing starts a 15-min cooldown (shown here as a short demo cooldown).";
+  btn(btns,"⬆ Elevated reading",()=>{ readings.push(true); if(readings.length>40) readings.shift(); draw(); },true);
+  btn(btns,"⬇ Normal reading",()=>{ readings.push(false); if(readings.length>40) readings.shift(); draw(); });
+  btn(btns,"↻ Reset",()=>{ readings=[]; for(let i=0;i<15;i++) readings.push(false); cooldownTicks=0; draw(); });
+};
+
+/* --- LLM explain --- */
+FIGS.explainfig = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const wrap = document.createElement("div"); wrap.style.cssText = "font-family:"+cssv("--font-mono")+";font-size:11px;display:flex;flex-direction:column;gap:8px";
+  const before = document.createElement("div");
+  before.style.cssText = "padding:10px 12px;border-radius:8px;background:var(--c-bg);border-left:3px solid var(--c)";
+  before.innerHTML = "<b>Before fix:</b> LLM called on EVERY tick → 1 Groq API call/second in a live loop. Impractical cost/latency/rate-limits.";
+  const after = document.createElement("div");
+  after.style.cssText = "padding:10px 12px;border-radius:8px;background:var(--a-bg);border-left:3px solid var(--a)";
+  after.innerHTML = "<b>After fix:</b> cached per severity-TIER-change. A sustained Severe AMS episode reuses the SAME explanation across hundreds of ticks.";
+  wrap.appendChild(before); wrap.appendChild(after);
+  stage.appendChild(wrap);
+  note.textContent = "This was a real gap found by actually timing a full scenario run during Day 11 testing — not something caught by reading the code.";
+};
+
+/* --- telegram alert --- */
+FIGS.alertfig = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const msg = document.createElement("div");
+  msg.style.cssText = "padding:12px 14px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);opacity:0;transition:opacity .5s;white-space:pre-wrap;font-family:"+cssv("--font-mono")+";font-size:11px";
+  msg.textContent = "ALTITUDE MEDICAL ALERT\nSeverity: Severe AMS\nTime: 2026-07-26 19:54:15 UTC\n\nVitals: SpO2 81%, HR 122bpm, Temp 37.2°C, Altitude 4300m\n\nThe model classifies this as Severe AMS, sustained. Real medical attention is recommended.\n\n-- Prototype system, not a certified medical device.";
+  stage.appendChild(msg);
+  note.textContent = "This exact format was sent to a real Telegram chat and confirmed delivered during development.";
+  btn(btns, "📨 Send (simulated)", ()=>{ msg.style.opacity=1; }, true);
+};
+
+/* --- dashboard --- */
+FIGS.dashboardfig = (stage, note, btns) => {
+  stage.innerHTML = "";
+  const card = document.createElement("div");
+  card.style.cssText = "border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel-2)";
+  card.innerHTML = `<div style="padding:12px;border-left:4px solid var(--b)">
+    <div style="font-size:10px;color:var(--faint);letter-spacing:1px">SEVERITY</div>
+    <div style="font-size:20px;font-weight:700">Severe AMS</div>
+    <div style="font-size:11px;color:var(--faint)">confidence 77%</div></div>`;
+  stage.appendChild(card);
+  note.textContent = "The full tick result renders here — verified in a real browser via Playwright, with a regression test guarding the 'needs 60 readings first' behavior.";
+};
+
+/* ---------- boot ---------- */
+function toggleTheme(){
+  const cur = document.documentElement.getAttribute("data-theme");
+  const sysDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const now = cur ? cur : (sysDark ? "dark" : "light");
+  document.documentElement.setAttribute("data-theme", now==="dark"?"light":"dark");
+  const open = location.hash.slice(1);
+  if (open && S[open]) openStep(open);
+}
+buildLanes();
+window.addEventListener("load", ()=>{ const h=location.hash.slice(1); if(h && S[h]) openStep(h); });
+window.addEventListener("hashchange", ()=>{ const h=location.hash.slice(1); if(!h){ showMap(); } });
+</script>
+</body>
+</html>
