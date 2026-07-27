@@ -118,9 +118,9 @@ footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); fo
 
     <div class="branch">
       <div class="stage cool">
-        <div class="stage-num">STAGE 6A · ALWAYS</div>
+        <div class="stage-num">STAGE 6A · ALWAYS ELIGIBLE</div>
         <div class="stage-title">LLM Interpretation (Groq / Llama 3.3 70B)</div>
-        <div class="stage-desc">Severity + vitals → plain-language explanation for dashboard chat &amp; alert body. Guardrailed: interprets readings, never diagnoses.</div>
+        <div class="stage-desc">Severity + vitals → plain-language explanation for dashboard chat &amp; alert body. Guardrailed: interprets readings, never diagnoses. Independent of the hysteresis gate (Stage 5) -- but re-generated only when the severity TIER changes, not on every single tick, to stay within free-tier rate limits in a live 1Hz loop.</div>
       </div>
       <div class="stage alert">
         <div class="stage-num">STAGE 6B · IF GATE PASSES</div>
@@ -139,8 +139,8 @@ footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); fo
   </div>
 
   <footer>
-    <span>high-altitude-medical-alert · data-flow v1.0</span>
-    <span>update thresholds/stages here as tuning changes in Phase 13</span>
+    <span>high-altitude-medical-alert · data-flow v1.1</span>
+    <span>All 7 stages built and verified as of Day 14. Stage 5's alert-eligible tier stayed at Severe AMS after Day 13 testing -- see docs/lls_mapping.md's "Known limitation" section.</span>
   </footer>
 </div>
 </body>
