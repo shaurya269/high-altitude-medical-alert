@@ -23,7 +23,7 @@ deferred).
 | Data | Synthetic vitals generator (400 subjects, 5 severity tiers) + real Harespod hypobaric-chamber recordings (15 subjects, rule-labeled, merged into training only) | `src/data/` |
 | Models | Rule-based baseline, XGBoost ordinal regressor (**selected**), LSTM comparison model — all compared on identical held-out data | `src/models/` |
 | Demo data sources | Scenario player, manual sliders, Harespod replay — all behind one swappable `DataSource` interface | `src/datasource/` |
-| LLM | Groq (Llama 3.3 70B): plain-language severity interpretation, live chat, structured-JSON alert content — with hard guardrails | `src/llm/` |
+| LLM | Groq (gpt-oss-120b, originally Llama 3.3 70B): plain-language severity interpretation, live chat, structured-JSON alert content — with hard guardrails | `src/llm/` |
 | Alerts | Hysteresis gate (sustained-severity + cooldown) → Telegram dispatch, with a local log fallback | `src/alerts/` |
 | Pipeline | Wires all of the above into one `.tick()` call per reading | `src/pipeline.py` |
 | Dashboard | Streamlit app: scenario picker, live vitals/severity plots, chat, alert log | `src/app/streamlit_app.py` |
@@ -177,7 +177,8 @@ Read this before trusting anything this system says.
 - **LLM guardrails are prompt-based, not architecturally enforced.** `src/llm/llm_chat.py`'s
   system prompt instructs the model never to diagnose, override the ML classification, give
   dosing advice, or discourage seeking real help — verified resistant to direct user pressure
-  in manual testing, but this is Llama 3.3 70B behavior, not a hard guarantee.
+  in manual testing, but this is model behavior (gpt-oss-120b, previously Llama 3.3 70B — the
+  adversarial test was re-run and passed again after switching), not a hard guarantee.
 - **No physical hardware exists.** Everything runs in Demo Mode against synthetic/replayed
   data. See `CLAUDE.md` Section 2A for the (not-yet-started) hardware phase design.
 

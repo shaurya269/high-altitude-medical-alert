@@ -35,7 +35,22 @@ import os
 from src.config import SEVERITY_TIERS
 from src.llm.prompts.system_prompt import SYSTEM_PROMPT
 
-GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_MODEL = "openai/gpt-oss-120b"
+# Previously "llama-3.3-70b-versatile" -- switched for gpt-oss-120b's much
+# higher Groq free-tier daily quota (this project genuinely hit 70B's
+# free-tier limit during testing). 70B was NOT a reasoning model, so its
+# max_tokens budget went entirely to visible output -- no separate
+# reasoning-token consumption, which is why the 200/300 limits below were
+# fine for it and had never caused a truncation problem before this switch.
+#
+# gpt-oss-120b IS a reasoning model: it spends a variable, unpredictable
+# chunk of max_tokens on internal reasoning before any visible output
+# (observed 66-181 reasoning tokens across identical calls in manual
+# testing). At the OLD max_tokens values (200/300, carried over unchanged
+# from the 70B era), 4 of 5 explain_severity() calls got cut off
+# mid-sentence (finish_reason="length") -- this is why every max_tokens
+# below was raised to 600 as part of this same switch, not tuned
+# independently.
 
 _client = None
 _client_checked = False
@@ -145,7 +160,7 @@ def explain_severity(severity_label: str, confidence: float, readings: dict) -> 
     ]
     try:
         response = client.chat.completions.create(
-            model=GROQ_MODEL, messages=messages, temperature=0.4, max_tokens=200
+            model=GROQ_MODEL, messages=messages, temperature=0.4, max_tokens=600
         )
         return response.choices[0].message.content
     except Exception as exc:  # Groq/network errors -- degrade, don't crash the dashboard
@@ -184,7 +199,7 @@ def chat(
 
     try:
         response = client.chat.completions.create(
-            model=GROQ_MODEL, messages=messages, temperature=0.5, max_tokens=300
+            model=GROQ_MODEL, messages=messages, temperature=0.5, max_tokens=600
         )
         return response.choices[0].message.content
     except Exception as exc:
@@ -251,7 +266,7 @@ def generate_alert_content(severity_label: str, confidence: float, readings: dic
             model=GROQ_MODEL,
             messages=messages,
             temperature=0.2,
-            max_tokens=300,
+            max_tokens=600,
             response_format={"type": "json_object"},
         )
         content = json.loads(response.choices[0].message.content)

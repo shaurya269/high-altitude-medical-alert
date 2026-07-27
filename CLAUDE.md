@@ -192,7 +192,7 @@ do not just accept a model that always predicts "Normal."
 | Severity classification (primary) | **XGBoost** (regression + threshold binning, or ordinal-aware boosting) | Best fit for small tabular data, fast to train/tune, interpretable feature importances, easy to serialize and deploy |
 | Severity classification (comparison) | **LSTM** (PyTorch, small, 1-2 layers) | Built as a comparison model on 60-second rolling windows to demonstrate DL approach; keep whichever performs better in practice — XGBoost is favored default for small datasets like this |
 | Baseline (build first, always) | Rule-based / clinical threshold classifier | Sanity floor — if ML doesn't clearly beat this, something is wrong with features or labels |
-| Conversational + alert interpretation | **Llama 3.3 70B via Groq API** | Free tier, fast inference, strong enough reasoning for interpreting structured severity output in plain language |
+| Conversational + alert interpretation | **gpt-oss-120b via Groq API** (originally Llama 3.3 70B) | Switched from 70B after genuinely hitting its free-tier daily limit during testing; gpt-oss-120b's free tier is far more generous. Being a reasoning model, it spends a variable share of `max_tokens` on internal reasoning before visible output (70B did not) — `max_tokens` was raised from 200/300 to 600 across `src/llm/llm_chat.py`'s three functions as part of the switch, after 4/5 calls truncated mid-sentence at the old values. The adversarial guardrail test (refuse dosing, refuse overriding the ML classification) was re-verified and still passes. |
 
 Do not add additional models beyond this set without discussing with the project owner
 — the goal is a complete, well-understood pipeline, not a model zoo.
@@ -295,7 +295,7 @@ would help (e.g. a dataset schema diagram, a model comparison chart), add it to
 |---|---|---|
 | Illness scope | AMS + HAPE + HACE, ordinal 5-tier | Confirmed |
 | Architecture | Local-first, cloud later | Confirmed |
-| LLM provider | Groq (Llama 3.3 70B) | Confirmed, API key obtained and verified working |
+| LLM provider | Groq (originally Llama 3.3 70B, switched to gpt-oss-120b after hitting 70B's free-tier daily limit) | Confirmed, API key obtained and verified working; switch re-verified against the same adversarial guardrail test |
 | Dataset | Synthetic (primary) + Harespod (real, train-only, rescaled+rule-labeled) | Confirmed, both downloaded and integrated |
 | Pilot altitude dataset (2nd real source) | Investigated, loaded, NOT used for labeling — oxygen-enriched protocol, not ambient air | Confirmed exclusion, kept for exploration only |
 | Alert channel | Telegram bot | Confirmed, bot token + chat_id obtained and verified with a live test message |
