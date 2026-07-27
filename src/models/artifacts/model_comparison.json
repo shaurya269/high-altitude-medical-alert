@@ -1,0 +1,31 @@
+{
+  "test_set_size": 351000,
+  "results_summary": [
+    {
+      "model": "Rule-Based Baseline",
+      "precision_macro": 0.349,
+      "recall_macro": 0.287,
+      "f1_macro": 0.2845,
+      "mean_abs_tier_error": 0.8189,
+      "under_triage_rate": 0.3088
+    },
+    {
+      "model": "XGBoost Ordinal",
+      "precision_macro": 0.3861,
+      "recall_macro": 0.3814,
+      "f1_macro": 0.3536,
+      "mean_abs_tier_error": 0.6041,
+      "under_triage_rate": 0.2442
+    },
+    {
+      "model": "LSTM",
+      "precision_macro": 0.4033,
+      "recall_macro": 0.4077,
+      "f1_macro": 0.3969,
+      "mean_abs_tier_error": 0.7013,
+      "under_triage_rate": 0.203
+    }
+  ],
+  "winner": "XGBoost Ordinal",
+  "winner_beats_baseline": true
+}

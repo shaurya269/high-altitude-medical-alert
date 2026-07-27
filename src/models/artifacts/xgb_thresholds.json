@@ -1,0 +1,19 @@
+{
+  "thresholds": [
+    0.9499999999999993,
+    2.199999999999999,
+    2.749999999999999,
+    4.249999999999999
+  ],
+  "feature_columns": [
+    "spo2",
+    "hr",
+    "temp",
+    "altitude",
+    "spo2_trend_5min",
+    "hr_trend_5min",
+    "ascent_rate",
+    "spo2_delta",
+    "time_at_altitude_min"
+  ]
+}
