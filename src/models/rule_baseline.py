@@ -45,6 +45,10 @@ def classify_row(spo2_delta: float, hr: float, spo2_trend_5min: float) -> int:
     # "early HAPE can desaturate fast" -- trend precedes magnitude).
     steep_negative_trend = spo2_trend_5min < -0.15  # % SpO2 lost per second, sustained
 
+    # Cascading if/elif-style checks from most to least severe: each branch
+    # only runs if every stricter branch above it already failed to match,
+    # so the thresholds are naturally nested (e.g. reaching the "Severe AMS"
+    # check already means the row failed the harder HAPE/HACE check above).
     if spo2_delta >= 16 or (spo2_delta >= 10 and steep_negative_trend):
         # Distinguish HACE from HAPE using the more extreme band + higher HR
         # elevation, per docs/lls_mapping.md's tier table -- HACE is modeled
@@ -59,7 +63,7 @@ def classify_row(spo2_delta: float, hr: float, spo2_trend_5min: float) -> int:
     if spo2_delta >= 4 or hr_elevation >= 10:
         return SEVERITY_INDEX["Mild AMS"]
 
-    return SEVERITY_INDEX["Normal"]
+    return SEVERITY_INDEX["Normal"]  # neither SpO2 nor HR deviated enough to trip any tier above
 
 
 def predict(df: pd.DataFrame) -> np.ndarray:
@@ -78,7 +82,7 @@ def predict(df: pd.DataFrame) -> np.ndarray:
     return df.apply(
         lambda row: classify_row(row["spo2_delta"], row["hr"], row["spo2_trend_5min"]),
         axis=1,
-    ).to_numpy()
+    ).to_numpy()  # .to_numpy() so callers get a plain int array, matching what evaluate() expects from every model (not a pandas Series)
 
 
 if __name__ == "__main__":

@@ -63,10 +63,10 @@ class ReadingBuffer:
         """
         for field, (lo, hi) in VALID_RANGES.items():
             value = reading.get(field)
-            if value is None or not (lo <= value <= hi):
+            if value is None or not (lo <= value <= hi):  # missing field OR outside the physically-possible range
                 self.rejected_count += 1
-                return False
-        self._readings.append(reading)
+                return False  # reject the WHOLE reading on any one bad field, rather than partially accepting it
+        self._readings.append(reading)  # deque with maxlen silently drops the oldest entry here once full -- no manual eviction needed
         return True
 
     def as_dataframe(self) -> pd.DataFrame:

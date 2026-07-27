@@ -164,10 +164,20 @@ def predict_severity(buffer_df: pd.DataFrame) -> dict:
         # Not a calibrated probability -- XGBoost regression doesn't
         # natively produce one -- but a useful "how borderline is this"
         # signal for the LLM prompt and dashboard to surface.
+        # Bracket the tuned thresholds with the severity index's absolute
+        # floor/ceiling (0.0 and 4.0) so every tier -- including the first
+        # and last -- has both a lower and upper edge to compute a bin
+        # width from.
         edges = [0.0] + list(thresholds) + [4.0]
         lo, hi = edges[tier_index], edges[tier_index + 1]
-        span = max(hi - lo, 1e-6)
+        span = max(hi - lo, 1e-6)  # avoid div-by-zero if two tuned thresholds ever land equal
         center = (lo + hi) / 2
+        # distance-from-center, normalized to [0,1] by half the bin width,
+        # then scaled into [0, 0.5] and subtracted from 1.0 -- so a
+        # prediction dead-center in its tier scores confidence 1.0, and one
+        # sitting right on a bin edge (least certain) bottoms out at 0.5
+        # rather than 0.0, since "on the edge" still means the model chose
+        # this tier over its neighbor, just barely.
         confidence = float(1.0 - min(abs(continuous - center) / (span / 2), 1.0) * 0.5)
 
     elif selected == "LSTM":
@@ -181,17 +191,24 @@ def predict_severity(buffer_df: pd.DataFrame) -> dict:
                 f"(60s at 1Hz), got {len(buffer_df)}. Not enough history yet -- caller "
                 "should fall back to the rule baseline until the buffer fills."
             )
+        # Take only the LAST WINDOW_SAMPLES rows of the buffer (most recent
+        # 60s at 1Hz) -- unlike build_windows()'s training-time striding
+        # over a whole trajectory, live inference only ever needs the one
+        # window ending at "right now".
         window = buffer_df[lstm_model.LSTM_RAW_COLUMNS].to_numpy(dtype=np.float32)[
             -lstm_model.WINDOW_SAMPLES :
         ]
-        window_norm = (window - mean) / std
+        window_norm = (window - mean) / std  # same train-set mean/std used at training time, never refit here
         import torch
 
         with torch.no_grad():
+            # .unsqueeze(0) adds a batch dimension of size 1 -- the model
+            # expects (batch, seq_len, n_features), but live inference only
+            # ever has a single window, not a batch.
             logits = model(torch.from_numpy(window_norm).float().unsqueeze(0))
-            probs = torch.softmax(logits, dim=1).squeeze(0).numpy()
+            probs = torch.softmax(logits, dim=1).squeeze(0).numpy()  # logits -> probabilities, then drop the batch dim back off
         tier_index = int(probs.argmax())
-        confidence = float(probs[tier_index])
+        confidence = float(probs[tier_index])  # the LSTM DOES natively produce a probability, unlike XGBoost's proxy above
 
     else:
         raise ValueError(f"Unknown selected model: {selected!r}")

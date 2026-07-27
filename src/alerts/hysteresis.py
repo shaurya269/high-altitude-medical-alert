@@ -79,6 +79,9 @@ class HysteresisGate:
 
         streak_satisfied = self._consecutive_count >= self.consecutive_required
         cooldown_satisfied = (
+            # No alert has ever fired yet -> cooldown trivially satisfied;
+            # otherwise only satisfied once enough wall-clock time has
+            # passed since the last one actually fired.
             self._last_alert_time is None or (now - self._last_alert_time) >= self.cooldown_seconds
         )
 

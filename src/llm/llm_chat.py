@@ -255,7 +255,7 @@ def generate_alert_content(severity_label: str, confidence: float, readings: dic
             response_format={"type": "json_object"},
         )
         content = json.loads(response.choices[0].message.content)
-        if not ALERT_JSON_KEYS <= set(content.keys()):
+        if not ALERT_JSON_KEYS <= set(content.keys()):  # set <= set is "is subset of" -- checks every required key is present, extra keys are fine
             # Model returned valid JSON but missing a required field --
             # treat as a failure rather than shipping a partial alert, per
             # CLAUDE.md's "machine-parseable, not free text that might

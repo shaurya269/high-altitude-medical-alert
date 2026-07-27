@@ -91,24 +91,28 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     # (growing window) rather than requiring the full TREND_WINDOW_SAMPLES
     # -- same "use the partial window you have so far" reasoning as before,
     # since a real device can't look back further than it's been running.
-    row_idx = pd.Series(np.arange(len(df)), index=df.index)
-    effective_lag = row_idx.clip(upper=TREND_WINDOW_SAMPLES - 1)
+    row_idx = pd.Series(np.arange(len(df)), index=df.index)  # 0, 1, 2, ... one integer per row -- "how far into the trajectory is this row"
+    effective_lag = row_idx.clip(upper=TREND_WINDOW_SAMPLES - 1)  # cap each row's lag at the full window size, so early rows use a SMALLER lag
 
     def _vectorized_slope(series: pd.Series) -> pd.Series:
-        first_full = series.shift(TREND_WINDOW_SAMPLES - 1)
-        span_full = float(TREND_WINDOW_SAMPLES - 1)
-        slope_full = (series - first_full) / span_full
+        first_full = series.shift(TREND_WINDOW_SAMPLES - 1)  # this row's value, shifted DOWN by the full window size -> gives "the value N rows ago" aligned to the current row
+        span_full = float(TREND_WINDOW_SAMPLES - 1)  # the time gap (in samples) between "N rows ago" and "now"
+        slope_full = (series - first_full) / span_full  # (now - then) / elapsed_samples = average change per sample = the slope
 
         # For the still-filling-up lead-in rows (fewer than
         # TREND_WINDOW_SAMPLES samples seen so far), fall back to a slope
         # against the very first sample of the trajectory (index 0) instead
         # -- growing-window behavior matching the old min_periods=2 case.
-        first_ever = series.iloc[0]
-        span_growing = effective_lag.replace(0, np.nan)  # avoid /0 on row 0
-        slope_growing = (series - first_ever) / span_growing
+        first_ever = series.iloc[0]  # the very first value in this subject's whole trajectory
+        span_growing = effective_lag.replace(0, np.nan)  # avoid /0 on row 0 (row 0 has lag 0, which would be a division by zero)
+        slope_growing = (series - first_ever) / span_growing  # slope computed against the trajectory's start, for rows too early to have a full window yet
 
+        # .where(condition, other): keep slope_full wherever the condition
+        # is True (row is far enough in for a full window), otherwise use
+        # slope_growing (row is still in the early "not enough history yet"
+        # period) -- this stitches the two calculations into one column.
         slope = slope_full.where(row_idx >= TREND_WINDOW_SAMPLES - 1, slope_growing)
-        return slope.fillna(0.0)
+        return slope.fillna(0.0)  # any remaining NaN (e.g. row 0's slope_growing, which had span_growing=NaN) becomes a neutral 0
 
     df["spo2_trend_5min"] = _vectorized_slope(df["spo2"])
     df["hr_trend_5min"] = _vectorized_slope(df["hr"])
@@ -116,29 +120,37 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
     # Ascent rate: meters/minute, using a 1-minute-back diff (60 samples at
     # 1Hz). fillna(0) for the first minute of any trajectory, where there's
     # no prior sample to diff against yet.
-    altitude_diff = df["altitude"].diff(periods=60 * SAMPLE_RATE_HZ)
+    altitude_diff = df["altitude"].diff(periods=60 * SAMPLE_RATE_HZ)  # this row's altitude minus the altitude 60 samples (1 minute) earlier
     df["ascent_rate"] = (altitude_diff / TREND_WINDOW_MINUTES).fillna(0.0)  # approx m/min
 
-    df["expected_spo2"] = expected_spo2(df["altitude"])
+    df["expected_spo2"] = expected_spo2(df["altitude"])  # the altitude-adjusted reference curve for every row
     df["spo2_delta"] = df["expected_spo2"] - df["spo2"]  # positive = worse than expected
 
     from src.config import ALTITUDE_RISK_ONSET_M
 
-    above_risk_altitude = df["altitude"] >= ALTITUDE_RISK_ONSET_M
+    above_risk_altitude = df["altitude"] >= ALTITUDE_RISK_ONSET_M  # a True/False column: True for every row at/above the risk-relevant altitude
     # cumsum trick: count seconds where above_risk_altitude is True, but
     # ONLY counting a contiguous run from the first time it becomes True
     # (not resetting on brief dips) -- once you've climbed above the risk
     # threshold, "time at altitude" should keep accumulating even through
     # small fluctuations, matching how altitude illness risk actually
     # accumulates with continued exposure.
+    # idxmax() on a boolean Series returns the index of the FIRST True value
+    # (pandas treats True as 1, False as 0, and idxmax finds the first max).
     first_risk_idx = above_risk_altitude.idxmax() if above_risk_altitude.any() else None
     if first_risk_idx is not None and above_risk_altitude.any():
+        # How many seconds have elapsed since the altitude first crossed the
+        # risk threshold; .clip(lower=0) guards against any negative value
+        # for rows that happen to come before that point in an edge case.
         seconds_since = (df["timestamp"] - df.loc[first_risk_idx, "timestamp"]).clip(lower=0)
         df["time_at_altitude_min"] = np.where(
+            # np.where(condition, value_if_true, value_if_false): rows at or
+            # after the risk-onset point get seconds_since converted to
+            # minutes; rows before it (still ascending) get a flat 0.
             df["timestamp"] >= df.loc[first_risk_idx, "timestamp"], seconds_since / 60.0, 0.0
         )
     else:
-        df["time_at_altitude_min"] = 0.0
+        df["time_at_altitude_min"] = 0.0  # this subject's whole trajectory never reached the risk altitude at all
 
     return df
 

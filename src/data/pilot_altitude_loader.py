@@ -139,21 +139,21 @@ def load_subject(subject_id: str) -> pd.DataFrame:
     # so a same-day parse is safe here -- if that assumption were ever
     # violated for a new file, the resulting negative/huge timestamp deltas
     # would be obviously wrong and easy to catch, not silently corrupted.
-    time_parsed = pd.to_datetime(raw["Time"], format="%H:%M:%S")
-    seconds = (time_parsed - time_parsed.iloc[0]).dt.total_seconds()
+    time_parsed = pd.to_datetime(raw["Time"], format="%H:%M:%S")  # parses HH:MM:SS onto an arbitrary placeholder date (pandas defaults to today)
+    seconds = (time_parsed - time_parsed.iloc[0]).dt.total_seconds()  # subtracting the first row's timestamp turns wall-clock time into "seconds since recording start"
 
     tidy = pd.DataFrame(
         {
             "timestamp": seconds,
             "spo2": raw["SPO2"].astype(float),
             "hr": raw["Heart rate"].astype(float),
-            "respiratory_rate": raw.get("Respiratory rate", pd.Series(dtype=float)),
+            "respiratory_rate": raw.get("Respiratory rate", pd.Series(dtype=float)),  # .get() with a fallback in case a future file is missing this column
             "altitude": raw["Altitude"].astype(float),
-            "subject_id": f"pilot_{subject_id}",
+            "subject_id": f"pilot_{subject_id}",  # prefixed so pilot subject IDs can never collide with Harespod's or synthetic data's IDs once merged
             "data_source": "pilot_altitude",
         }
     )
-    return tidy.sort_values("timestamp").reset_index(drop=True)
+    return tidy.sort_values("timestamp").reset_index(drop=True)  # defensive re-sort even though the source file is already 1Hz-ordered
 
 
 def load_all_subjects() -> pd.DataFrame:

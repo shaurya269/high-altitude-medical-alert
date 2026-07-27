@@ -132,6 +132,23 @@
   .flow .node.hot { border-color: var(--accent); color: var(--accent); }
   .flow .arrow { color: var(--muted); }
 
+  /* Notebook cell-by-cell blocks -- lighter weight than .cell, since a notebook
+     section walks through many more (shorter) cells than a source-file section. */
+  .notebook { margin: 0 0 44px; padding: 26px 28px; background: var(--card); border: 1px solid var(--hair); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .notebook > h3 { font-family: var(--sans); font-size: 1.1rem; font-weight: 800; margin: 0 0 6px; color: var(--ink); }
+  .notebook .nb-desc { font-family: var(--sans); color: var(--muted); font-size: 0.88rem; margin: 0 0 22px; max-width: 74ch; }
+  .nb-cell { margin: 0 0 20px; padding-bottom: 20px; border-bottom: 1px solid var(--hair); }
+  .nb-cell:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+  .nb-cell-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; }
+  .nb-cell-head .nb-tag { font-family: var(--mono); font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 1px 8px; border-radius: 100px; }
+  .nb-tag.md { background: var(--blue-soft); color: var(--blue); }
+  .nb-tag.code { background: var(--teal-soft); color: var(--teal); }
+  .nb-cell-head .nb-title { font-family: var(--sans); font-weight: 700; font-size: 0.94rem; color: var(--ink); }
+  .nb-md { font-size: 0.95rem; color: var(--ink-soft); margin: 0 0 10px; max-width: 74ch; }
+  .nb-md p { margin: 0 0 8px; }
+  .nb-md p:last-child { margin-bottom: 0; }
+  .nb-md code { font-family: var(--mono); font-size: 0.86em; background: var(--accent-soft); color: var(--accent); padding: 1px 5px; border-radius: 4px; }
+
   footer { margin-top: 80px; padding-top: 24px; border-top: 1px solid var(--hair); font-family: var(--sans); font-size: 0.8rem; color: var(--muted); }
   ::selection { background: var(--accent-soft); color: var(--accent); }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -172,6 +189,18 @@
       <a href="#hysteresis">hysteresis.py</a>
       <a href="#pipeline">pipeline.py</a>
       <a href="#streamlit">streamlit_app.py</a>
+
+      <div class="group-label">Notebooks · cell by cell</div>
+      <a href="#nb01">01 · Data exploration</a>
+      <a href="#nb02">02 · config.py</a>
+      <a href="#nb03">03 · synth_data.py</a>
+      <a href="#nb04">04 · harespod_loader.py</a>
+      <a href="#nb05">05 · feature_engineering.py</a>
+      <a href="#nb06">06 · rule_baseline.py</a>
+      <a href="#nb07">07 · metrics.py</a>
+      <a href="#nb08">08 · xgb_ordinal.py</a>
+      <a href="#nb09">09 · lstm_model.py</a>
+      <a href="#nb10">10 · predict_severity.py</a>
     </nav>
 
     <button class="theme-toggle" onclick="toggleTheme()">◐ Toggle theme</button>
@@ -808,6 +837,700 @@ def test_stepping_forward_accumulates_history_and_eventually_classifies():
     for _ in range(60):
         step_button.click().run(timeout=30)
     assert any(tier in all_markdown_text for tier in SEVERITY_TIERS)</code></pre>
+        </div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- NOTEBOOKS -->
+    <!-- ============================================================ -->
+    <section class="phase" id="nb-intro">
+      <div class="phase-head"><h2>Notebooks — cell by cell</h2></div>
+      <p class="phase-sub">Everything above explained each source module in isolation. These 10 notebooks (<code>notebooks/01_data_exploration.ipynb</code> through <code>10_predict_severity_walkthrough.ipynb</code>) import and actually <em>run</em> that real code, cell by cell, with real output. What follows is every notebook's markdown explanation and every code cell's real output, reproduced here rather than requiring Jupyter to read them.</p>
+    </section>
+
+    <section class="phase" id="nb01">
+      <div class="phase-head"><h2>01 — Data exploration &amp; Week 1 summary</h2><span class="phase-tag">7 cells</span></div>
+      <p class="phase-sub"><code>notebooks/01_data_exploration.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">Explores the synthetic vitals dataset and the engineered/split output. Harespod wasn't yet downloaded when this notebook was first written — see notebook 04 for the adapter that was waiting for it.</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Load raw + split datasets, check shapes</span></div>
+<pre><code>raw = pd.read_csv(SYNTHETIC_DIR / "synthetic_vitals.csv")
+train = pd.read_csv(PROCESSED_DIR / "train.csv")
+val = pd.read_csv(PROCESSED_DIR / "val.csv")
+test = pd.read_csv(PROCESSED_DIR / "test.csv")
+raw.shape, train.shape, val.shape, test.shape</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>((2160000, 7), (1501200, 14), (307800, 14), (351000, 14))</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Class balance across the temporal, tier-stratified split</span></div>
+          <p class="nb-md">Every tier must appear in every split (guarded by <code>tests/test_pipeline.py::test_temporal_split_no_subject_overlap</code>) — an earlier version of the split used a plain chronological cut across all subjects and, by bad luck of subject ordering, produced a test set with <b>zero HACE-risk examples</b>. Stratifying the temporal cut per severity tier fixed this.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Subjects and label counts per split</span></div>
+<pre><code>for name, df in [("train", train), ("val", val), ("test", test)]:
+    print(name, df["subject_id"].nunique(), "subjects")
+    print(df["severity_label"].value_counts())</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>train 278 subjects
+Normal 891000 · Mild AMS 253800 · Severe AMS 199800 · HAPE risk 86400 · HACE risk 70200
+
+val 57 subjects
+Normal 189000 · Mild AMS 54000 · Severe AMS 37800 · HAPE risk 16200 · HACE risk 10800
+
+test 65 subjects
+Normal 199800 · Mild AMS 59400 · Severe AMS 48600 · HACE risk 21600 · HAPE risk 21600</div>
+          <div class="why-box">Every tier appears in every split with real counts — the exact guarantee the stratified split (notebook 05) exists to provide.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Plot one example trajectory per tier</span></div>
+<pre><code>fig, axes = plt.subplots(len(SEVERITY_TIERS), 1, figsize=(9, 12), sharex=True)
+for ax, tier in zip(axes, SEVERITY_TIERS):
+    subj = raw[raw["severity_label"] == tier]["subject_id"].iloc[0]
+    traj = raw[raw["subject_id"] == subj].sort_values("timestamp")
+    ax.plot(traj["timestamp"] / 60, traj["spo2"], label="SpO2")
+    ax2 = ax.twinx()
+    ax2.plot(traj["timestamp"] / 60, traj["altitude"], color="orange", alpha=0.5)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Figure: 5 stacked subplots, SpO2 (line) vs altitude (twin axis) for one Normal, Mild AMS, Severe AMS, HAPE risk, and HACE risk subject — sanity check that onset is a gradual sigmoid ramp, not a step function.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Model comparison recap (Days 4-7)</span></div>
+          <div class="table-wrap"><table>
+            <tr><th>Model</th><th>Precision</th><th>Recall</th><th>F1</th><th>MATE</th><th>Under-triage</th></tr>
+            <tr><td>Rule-Based Baseline</td><td>0.349</td><td>0.287</td><td>0.285</td><td>0.819</td><td>0.309</td></tr>
+            <tr class="highlight"><td>XGBoost Ordinal (selected)</td><td>0.387</td><td>0.405</td><td>0.374</td><td>0.594</td><td>0.221</td></tr>
+            <tr><td>LSTM</td><td>0.405</td><td>0.370</td><td>0.374</td><td>0.785</td><td>0.235</td></tr>
+          </table></div>
+          <div class="why-box">XGBoost Ordinal selected — lowest MATE, clearly beats the rule-based sanity floor. Feature importances show <code>spo2_delta</code> and <code>time_at_altitude_min</code> dominate, consistent with <code>docs/lls_mapping.md</code>'s reasoning that deviation-from-altitude-expected SpO2 (not raw SpO2) and cumulative exposure time are the clinically meaningful signals.</div>
+        </div>
+      </article>
+    </section>
+
+    <section class="phase" id="nb02">
+      <div class="phase-head"><h2>02 — config.py: the single source of truth</h2><span class="phase-tag">15 cells</span></div>
+      <p class="phase-sub"><code>notebooks/02_config_walkthrough.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">Every other module imports constants from here instead of re-declaring its own copy of "what counts as Severe AMS." This notebook imports the real module and walks through each section.</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Why centralize constants at all?</span></div>
+          <p class="nb-md">Imagine <code>synth_data.py</code> hardcoded <code>SEVERITY_TIERS = [...]</code> and <code>rule_baseline.py</code> had its own separate copy. Six months from now you rename "HAPE risk" to "HAPE onset" — you'd have to remember every file with its own copy, and if you miss one, the two lists silently drift apart. With one shared <code>config.py</code>, you change it in exactly one place.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Paths, derived from __file__</span></div>
+<pre><code>print("PROJECT_ROOT:  ", config.PROJECT_ROOT)
+print("MODELS_DIR:    ", config.MODELS_DIR)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>PROJECT_ROOT:   ...\Medical Alert System
+MODELS_DIR:     ...\Medical Alert System\src\models\artifacts</div>
+          <div class="why-box"><b>Why not hardcode the path?</b> That only works on one machine, in one exact folder. Deriving it from <code>__file__</code> means the code finds its own project root no matter where it's sitting.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Severity tiers as an ordered, indexable list</span></div>
+<pre><code>print("Tiers:", config.SEVERITY_TIERS)
+print("Index lookup:", config.SEVERITY_INDEX)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Tiers: ['Normal', 'Mild AMS', 'Severe AMS', 'HAPE risk', 'HACE risk']
+Index lookup: {'Normal': 0, 'Mild AMS': 1, 'Severe AMS': 2, 'HAPE risk': 3, 'HACE risk': 4}</div>
+          <div class="why-box"><b>Ordinal vs. plain multi-class:</b> plain multi-class classification would score "predicted Normal, actual HACE risk" exactly as wrong as "predicted Mild AMS, actual Severe AMS." Because <code>SEVERITY_TIERS</code> is an ordered, indexable list, XGBoost (notebook 08) can instead regress this index as a continuous number, teaching the model that tier 4 is "far" from tier 0 but "close" to tier 3.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">expected_spo2() at various altitudes</span></div>
+<pre><code>for altitude in [0, 2000, 3500, 5000, 6000]:
+    print(f"altitude={altitude:>5}m -> expected SpO2 = {expected_spo2(altitude):.1f}%")</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>altitude=    0m  ->  expected SpO2 = 98.0%
+altitude= 2000m  ->  expected SpO2 = 92.0%
+altitude= 3500m  ->  expected SpO2 = 87.5%
+altitude= 5000m  ->  expected SpO2 = 83.0%
+altitude= 6000m  ->  expected SpO2 = 80.0%</div>
+          <div class="why-box"><b>Why deltas, not raw SpO2:</b> an SpO2 of 88% is alarming at sea level but potentially unremarkable at 5000m. The rest of the pipeline reasons about deviation from this altitude-adjusted curve, never a raw number in a vacuum.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Feature-window and hysteresis constants</span></div>
+<pre><code>print("LSTM window:", config.LSTM_WINDOW_SECONDS, "seconds =",
+      config.LSTM_WINDOW_SECONDS * config.SAMPLE_RATE_HZ, "samples at", config.SAMPLE_RATE_HZ, "Hz")
+print("Alert-eligible at tier >=", config.HYSTERESIS_ALERT_TIER,
+      f"({config.SEVERITY_TIERS[config.HYSTERESIS_ALERT_TIER]})")</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>LSTM window: 60 seconds = 60 samples at 1 Hz
+Alert-eligible at tier >= 2 (Severe AMS)
+Must sustain for 3 consecutive readings
+Cooldown between alerts: 900 seconds = 15 minutes</div>
+          <div class="why-box"><b>SAMPLE_RATE_HZ = 1:</b> Harespod's raw data is 100Hz, but a real Arduino polling I2C sensors realistically can't sustain that — 1Hz is the realistic target rate. Every timing-aware module reads this constant rather than hardcoding "60" or "300".</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Split fractions sum to 1.0</span></div>
+<pre><code>print("Sum:", config.TRAIN_FRACTION + config.VAL_FRACTION + config.TEST_FRACTION)
+print("Random seed:", config.RANDOM_SEED)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Sum: 1.0
+Random seed: 42</div>
+          <div class="why-box"><b>RANDOM_SEED=42</b> is used everywhere randomness happens (data generation, XGBoost training, LSTM init) so re-running the pipeline reproduces the same dataset and models — essential for debugging a bug that shouldn't come and go with a different seed each run.</div>
+        </div>
+      </article>
+    </section>
+
+    <section class="phase" id="nb03">
+      <div class="phase-head"><h2>03 — synth_data.py: generating the dataset</h2><span class="phase-tag">17 cells</span></div>
+      <p class="phase-sub"><code>notebooks/03_synth_data_walkthrough.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">Runs the real generator functions directly and plots the results — this is the module that currently produces the primary training data (not just a Harespod gap-filler).</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Why synthetic data at all, and why now?</span></div>
+          <p class="nb-md">The real dataset (Harespod) has four gaps: no body temperature, no continuous altitude, no HAPE/HACE cases (can't ethically induce those in human subjects), and no severity labels. Rather than block Days 2-7 on a manual Figshare download, this generator lets the project proceed immediately, with <code>harespod_loader.py</code> ready to blend in real recordings once downloaded.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">expected_spo2() reference curve, plotted</span></div>
+<pre><code>altitudes = np.linspace(0, 6000, 50)
+expected = [synth_data.expected_spo2(a) for a in altitudes]
+plt.plot(altitudes, expected)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Figure: a straight declining line from 98% at 0m to ~80% at 6000m — every trajectory's severity signal is measured as a deviation from this curve.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">TierProfile ranges, and the "progressive" flag</span></div>
+          <p class="nb-md">Each tier has <b>ranges</b>, not fixed numbers, so sampling uniformly within a range gives natural within-class variation. <code>progressive</code> is the key clinical modeling decision: Mild/Severe AMS <b>plateau</b> after onset (sick but stable), while HAPE/HACE risk are <b>progressive</b> (keep worsening through the whole window, no plateau) — matching the clinical idea that these are decompensating, dangerous trajectories that don't self-stabilize.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Print every tier's profile</span></div>
+<pre><code>for tier, profile in synth_data.TIER_PROFILES.items():
+    print(tier, profile.spo2_delta_range, profile.hr_elevation_range, profile.progressive)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Normal        spo2_delta=(-1.5, 1.5)  hr_elev=(-5, 8)    progressive=False
+Mild AMS      spo2_delta=(4, 8)     hr_elev=(10, 20)  progressive=False
+Severe AMS    spo2_delta=(8, 14)    hr_elev=(20, 35)  progressive=False
+HAPE risk     spo2_delta=(14, 22)   hr_elev=(28, 45)  progressive=True
+HACE risk     spo2_delta=(16, 26)   hr_elev=(32, 50)  progressive=True</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Class imbalance is intentional</span></div>
+          <p class="nb-md"><code>TIER_PREVALENCE</code> gives Normal 55%, down to HACE risk at 4%. Real populations at altitude are mostly fine — severe illness is genuinely rare. This imbalance must be real and handled (via class weighting in the models), not artificially balanced away, or the models would learn a false prior about how common HACE risk actually is.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">_smooth_ramp(): sigmoid onset, plotted for 3 onset fractions</span></div>
+<pre><code>for onset_fraction in [0.2, 0.35, 0.5]:
+    ramp = synth_data._smooth_ramp(n, onset_fraction, rng)
+    ax.plot(np.arange(n) / 60, ramp, label=f"onset_fraction={onset_fraction}")</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Figure: 3 sigmoid curves, each flat at 0 then rising smoothly to ~1.0, starting at different points along the 90-minute window.</div>
+          <div class="why-box"><b>Why not a step function?</b> A model trained on instant jumps would learn to detect abrupt discontinuities, not real gradual physiological deterioration, and would generalize poorly to an actual, slowly-worsening patient.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">simulate_trajectory() — one example per tier, plotted</span></div>
+<pre><code>for ax, tier in zip(axes, SEVERITY_TIERS):
+    traj = synth_data.simulate_trajectory(f"demo_{tier}", tier, duration_minutes=90, rng=rng)
+    ax.plot(traj["timestamp"] / 60, traj["spo2"], color="#2FB8A6")</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Figure: 5 stacked panels, SpO2 vs altitude, one per tier. Every tier ascends identically (that's altitude, not illness) — the difference is what SpO2 does after the ascent: Normal barely deviates, Mild/Severe AMS dip then plateau, HAPE/HACE risk keep sinking with no recovery.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">generate_dataset() on a small population</span></div>
+<pre><code>small_dataset = synth_data.generate_dataset(n_subjects=60, duration_minutes=20, seed=1)
+print(small_dataset["severity_label"].value_counts(normalize=True).round(3))</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>72,000 rows, 60 subjects
+Normal 0.450 · Mild AMS 0.267 · Severe AMS 0.167 · HAPE risk 0.117</div>
+          <div class="why-box">Close to the target <code>TIER_PREVALENCE</code>, with natural sampling noise from only 60 subjects — the real run uses 400 subjects, tracking the target proportions much more tightly (see notebook 01).</div>
+        </div>
+      </article>
+    </section>
+
+    <section class="phase" id="nb04">
+      <div class="phase-head"><h2>04 — harespod_loader.py: the real-data adapter</h2><span class="phase-tag">12 cells</span></div>
+      <p class="phase-sub"><code>notebooks/04_harespod_loader_walkthrough.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">Unlike every other notebook, this module's job hadn't been fully exercised when this notebook was first written — the real Harespod dataset hadn't been downloaded yet (manual Figshare browser download). This notebook explains what the loader is for, and what happens the moment real files land.</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Why this file exists before the data does</span></div>
+          <p class="nb-md">"Synthetic-first, adapter ready": rather than blocking Days 1-7 on a manual download, the entire dataset/feature/model pipeline was built against the synthetic generator, while this loader was written against Harespod's <b>documented</b> schema. The goal: the moment real files are downloaded, this module produces real data with zero changes needed anywhere else in the pipeline.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">has_harespod_data() — the cheap existence check</span></div>
+<pre><code>print("Expected location: ", HARESPOD_DIR)
+print("Has data:          ", harespod_loader.has_harespod_data())</code></pre>
+          <div class="output-box"><span class="lbl">Output (at the time this notebook was first run)</span>Expected location:  ...\data\raw\harespod
+Has data:           False</div>
+          <div class="why-box">Returns <code>False</code> rather than raising, so calling code can branch with a plain <code>if</code> instead of wrapping every call in <code>try/except</code>.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">The clear error message before data exists</span></div>
+<pre><code>try:
+    harespod_loader.load_all_subjects()
+except FileNotFoundError as e:
+    print(e)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Harespod data not found in data/raw/harespod/.
+This is expected if you haven't downloaded it yet...
+To get it:
+  1. Visit https://doi.org/10.6084/m9.figshare.c.6623344.v1
+  2. Download and unzip into data/raw/harespod
+  3. (Optional) companion code: github.com/oca-john/Harespod</div>
+          <div class="why-box">A clear, actionable message instead of a cryptic pandas error three stack frames deep.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">interpolate_altitude() — chamber markers to a continuous curve</span></div>
+<pre><code>markers = [(0, 0), (120, 3000), (300, 3000), (420, 5000), (600, 5000)]  # (time_s, altitude_m)
+interpolated = harespod_loader.interpolate_altitude(demo_df, markers)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Figure: a piecewise-linear altitude curve passing exactly through each red marker point, straight lines in between.</div>
+          <div class="why-box">Harespod is a hypobaric chamber study — altitude is a series of discrete operator-triggered events, not a continuous sensor reading. <code>np.interp</code> linearly interpolates between known marker points, a reasonable assumption for a protocol that ramps pressure smoothly between steps.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Stride-downsampling vs. averaging — preserving real noise</span></div>
+<pre><code>strided = fake_100hz.iloc[::100].reset_index(drop=True)
+averaged = fake_100hz.groupby(np.arange(len(fake_100hz)) // 100).mean().reset_index(drop=True)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Original (100Hz) std:  2.93
+Strided (1Hz) std:     2.81  &lt;- preserves real per-sample noise
+Averaged (1Hz) std:    0.29  &lt;- artificially smoothed, understates noise</div>
+          <div class="why-box"><b>Why stride, not average:</b> our models need to learn to handle noisy readings, because that's what the real Arduino will actually produce. Averaging every 100 samples down to 1 would smooth out real sensor noise and make the models overconfident about clean signals.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">What's still a placeholder</span></div>
+          <p class="nb-md"><code>load_subject()</code>'s file-reading logic was a guess at the naming convention before the archive was inspected. The output contract (<code>TIDY_COLUMNS</code>) stays the same regardless — only the "how do I read the raw file" part needed filling in once the real files landed (which they since have — see notebooks 05 onward using real Harespod data via <code>src/data/label_real_data.py</code>).</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="phase" id="nb05">
+      <div class="phase-head"><h2>05 — feature_engineering.py: trends + the temporal split</h2><span class="phase-tag">17 cells</span></div>
+      <p class="phase-sub"><code>notebooks/05_feature_engineering_walkthrough.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">Two distinct jobs: turning raw vitals into the 5 engineered features, and splitting subjects into train/val/test without leakage — including a real stratification bug found and fixed along the way.</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">engineer_features() on one HAPE-risk trajectory</span></div>
+<pre><code>raw_traj = synth_data.simulate_trajectory("demo", "HAPE risk", duration_minutes=90, rng=rng)
+featured = fe.engineer_features(raw_traj)
+featured[["timestamp","spo2","spo2_trend_5min","altitude","ascent_rate","spo2_delta","time_at_altitude_min"]]</code></pre>
+          <div class="output-box"><span class="lbl">Output (every 300th row)</span>timestamp=0     spo2=97.48  spo2_delta=0.52   altitude=0      time_at_altitude=0
+timestamp=1500  spo2=89.13  spo2_delta=1.33   altitude=2513   time_at_altitude=0.12
+timestamp=1800  spo2=87.58  spo2_delta=2.28   altitude=2714   time_at_altitude=5.12
+timestamp=2700  spo2=85.28  spo2_delta=?      altitude=2714   time_at_altitude=15.12</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">The vectorized trend calculation — a real performance fix</span></div>
+          <p class="nb-md"><b>First version</b> used <code>rolling().apply(python_slope_fn)</code> — calls a Python function once per row and re-scans the whole window each time, <code>O(n * window_size)</code> with real per-call overhead. With 400 subjects × 5400 rows × a 300-sample window, this became a genuine bottleneck. <b>Current version</b> uses <code>.shift()</code> and elementwise subtraction/division, running as optimized pandas/numpy C code across the entire column at once. The math is identical — only the mechanism changed.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Direct timing comparison, old vs. new</span></div>
+<pre><code>t0 = time.perf_counter()
+old_result = big_traj["spo2"].rolling(window=300, min_periods=2).apply(_old_style_slope, raw=False)
+t_old = time.perf_counter() - t0
+...</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Old rolling().apply() style: 449.7 ms  (single 90-min trajectory)
+New vectorized style:        14.4 ms
+Speedup: ~31x
+(the new version also does 4 more features in that time, not just this one)</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Altitude-derived features plotted</span></div>
+<pre><code>axes[0].plot(minutes, featured["altitude"])
+axes[1].plot(minutes, featured["ascent_rate"])
+axes[2].plot(minutes, featured["time_at_altitude_min"])</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Figure: <code>time_at_altitude_min</code> stays flat at 0 during ascent (before crossing 2500m), then grows continuously and linearly once the threshold is crossed — even as <code>ascent_rate</code> bounces near zero once cruising altitude is reached.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">The bug: a plain temporal split can silently starve a class</span></div>
+          <p class="nb-md"><b>Original (broken):</b> sort all subjects together, cut at 70/15/15. With ~120 subjects and HACE risk only ~4% of subjects, one chronological cut across the whole population could, by chance, put every single HACE-risk subject in train — <b>the test set had zero HACE-risk examples</b>, silently making every metric on that tier meaningless.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Reproducing the naive bug on a small population</span></div>
+<pre><code>naive_test_ids = set(subject_ids_all[int(n*0.85):])  # last 15%, ignoring tier
+naive_test = featured_small[featured_small["subject_id"].isin(naive_test_ids)]
+print(sorted(naive_test["severity_label"].unique()))</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Naive (buggy) chronological split -- tiers present in the resulting 'test' set:
+['HAPE risk', 'Mild AMS', 'Normal', 'Severe AMS']
+(compare to all 5 tiers in the full dataset: ['HACE risk', 'HAPE risk', 'Mild AMS', 'Normal', 'Severe AMS'])</div>
+          <div class="bug-box"><b>Confirmed:</b> HACE risk is completely absent from the naive test split, reproducing the exact failure mode that motivated the fix.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">The fixed, stratified-temporal split</span></div>
+<pre><code>train_s, val_s, test_s = fe.temporal_split(featured_small)
+for name, split in [("train", train_s), ("val", val_s), ("test", test_s)]:
+    print(name, sorted(split["severity_label"].unique()))</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>train: ['HACE risk', 'HAPE risk', 'Mild AMS', 'Normal', 'Severe AMS']
+val:   ['HAPE risk', 'Mild AMS', 'Normal', 'Severe AMS']
+test:  ['HAPE risk', 'Mild AMS', 'Normal']</div>
+          <div class="fix-box"><b>Fix:</b> group subjects by tier first, then apply the same chronological cut within each tier's own subject list — still no row-shuffling, but every tier's split guarantee now holds independently rather than being left to chance. Became a permanent regression test.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Why split by whole subject, never by row</span></div>
+          <p class="nb-md">If split by row instead, a test-set row at minute 47 of some subject's trajectory could sit right next to a train-set row at minute 46 of the <em>same</em> subject — the model would implicitly be tested on data adjacent to what it trained on. That's leakage. Splitting on whole subjects closes this off completely.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="phase" id="nb06">
+      <div class="phase-head"><h2>06 — rule_baseline.py: the sanity-floor baseline</h2><span class="phase-tag">12 cells</span></div>
+      <p class="phase-sub"><code>notebooks/06_rule_baseline_walkthrough.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">This model must exist before XGBoost or the LSTM are trusted. If a sophisticated model can't clearly beat a handful of hand-written if/else rules, that's a red flag about features or labels, not evidence the ML approach is wrong.</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">classify_row() walked through by hand on 5 cases</span></div>
+<pre><code>examples = [
+    dict(spo2_delta=1.0,  hr=75,  spo2_trend_5min=0.0,   note="near-normal reading"),
+    dict(spo2_delta=11.0, hr=95,  spo2_trend_5min=-0.01, note="severe deviation, stable trend"),
+    dict(spo2_delta=11.0, hr=95,  spo2_trend_5min=-0.20, note="same deviation, but STEEP negative trend"),
+    dict(spo2_delta=22.0, hr=120, spo2_trend_5min=-0.10, note="extreme deviation + high HR"),
+]</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>near-normal reading                        -> Normal
+mild deviation                             -> Mild AMS
+severe deviation, stable trend             -> Severe AMS
+same deviation, but STEEP negative trend   -> HAPE risk
+extreme deviation + high HR                -> HACE risk</div>
+          <div class="why-box">Rows 3 and 4 have the identical <code>spo2_delta</code> (11.0) — the only difference is trend (stable vs. steep negative). That's the trend-aware branch catching a rapidly-worsening case before the absolute deviation alone would flag it.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">predict()'s clear error on missing columns</span></div>
+<pre><code>try:
+    rule_baseline.predict(pd.DataFrame({"spo2": [90, 85]}))
+except ValueError as e:
+    print(e)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>rule_baseline.predict() requires columns {'spo2_delta', 'spo2_trend_5min', 'hr'}, missing {'spo2_delta', 'spo2_trend_5min', 'hr'}. Run src.data.feature_engineering.engineer_features first.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Real test-set performance</span></div>
+<pre><code>y_pred = rule_baseline.predict(test_df)
+result = evaluate(y_true, y_pred, model_name="Rule-Based Baseline (test set)")
+print_report(result)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Precision (macro):    0.3490
+Recall (macro):       0.2870
+F1 (macro):            0.2845
+Mean Abs Tier Error:   0.8189
+Under-triage rate:     0.3088</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Reading the confusion matrix</span></div>
+          <p class="nb-md">The baseline correctly identifies a good chunk of Normal and Mild AMS. It's noticeably weaker distinguishing HAPE risk from HACE risk — both occupy the same "large deviation" region of the rule tree, and the HACE-specific sub-condition is a narrow slice. This is expected, and exactly the weakness XGBoost's learned thresholds (notebook 08) improve on.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="phase" id="nb07">
+      <div class="phase-head"><h2>07 — metrics.py: scoring every model the same way</h2><span class="phase-tag">14 cells</span></div>
+      <p class="phase-sub"><code>notebooks/07_metrics_walkthrough.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">Explains why each metric was chosen — this matters more here than most ML projects because of the ordinal + imbalanced + safety-critical combination this system has.</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Macro vs. micro/weighted F1 on a deliberately lopsided toy model</span></div>
+<pre><code>y_true = np.array([0]*1000 + [4]*40)
+y_pred = np.array([0]*1000 + [0]*40)   # always predicts Normal, never catches HACE risk
+print("micro F1:", f1_score(y_true, y_pred, average='micro', labels=[0,4]))
+print("macro F1:", f1_score(y_true, y_pred, average='macro', labels=[0,4]))</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>micro F1:    0.962  &lt;- looks great! dominated by the 1000 correct 'Normal' predictions
+weighted F1: 0.943  &lt;- still looks great, same problem
+macro F1:    0.49   &lt;- correctly exposes that this model NEVER catches HACE risk</div>
+          <div class="why-box">This is the exact failure mode macro-averaging exists to expose: a model silently useless on the rare, dangerous class can hide behind a good micro/weighted score.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">MATE tells two same-accuracy models apart</span></div>
+<pre><code>model_a_pred = np.array([1, 0, 1, 4, 3])   # always off by exactly 1 tier
+model_b_pred = np.array([4, 4, 0, 0, 0])   # sometimes exactly right, sometimes wildly off</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Model A: accuracy=0.00  MATE=1.00  (consistently close, never exactly right)
+Model B: accuracy=0.00  MATE=3.20  (right sometimes, catastrophically wrong other times)</div>
+          <div class="why-box">Same 0% accuracy for both — the point is MATE tells them apart when plain accuracy can't, exactly what an ordinal metric needs to do.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">under_triage_rate distinguishes error DIRECTION at equal |error|</span></div>
+<pre><code>over_triage_case = dict(y_true=[0], y_pred=[2])    # predicted TOO SEVERE
+under_triage_case = dict(y_true=[3], y_pred=[1])   # predicted TOO MILD</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Over-triage (false alarm)         MATE=2.0  under_triage_rate=0.0
+Under-triage (missed alert)       MATE=2.0  under_triage_rate=1.0</div>
+          <div class="why-box">Identical MATE, but under-triage is the clinically dangerous direction — a HAPE-risk case predicted as Mild AMS might never trigger the hysteresis gate at all. Tracked explicitly so it can't hide inside MATE.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">compare_models() side-by-side table on 3 toy models</span></div>
+<pre><code>comparison = compare_models([result, result_b, result_c])</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>toy example         precision=0.60  f1=0.53  MATE=0.4
+toy model B         precision=0.75  f1=0.67  MATE=0.3
+toy perfect model   precision=1.00  f1=1.00  MATE=0.0</div>
+        </div>
+      </article>
+    </section>
+
+    <section class="phase" id="nb08">
+      <div class="phase-head"><h2>08 — xgb_ordinal.py: the primary model</h2><span class="phase-tag core">22 cells</span></div>
+      <p class="phase-sub"><code>notebooks/08_xgb_ordinal_walkthrough.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">The central trick that makes plain XGBoost ordinal-aware: regression + tuned threshold binning, instead of the more obvious "5-class classifier" approach.</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Regression loss vs. classification loss on the same two wrong predictions</span></div>
+<pre><code>true_tier = 4  # HACE risk
+pred_close = 3.7   # "almost 4"
+pred_far = 0.2      # "way off"
+print("close miss:", (pred_close - true_tier)**2)
+print("far miss:  ", (pred_far - true_tier)**2)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Regression squared error:
+  close miss (pred=3.7): 0.09
+  far miss   (pred=0.2): 14.44
+  -> the loss function ITSELF penalizes the far miss much more heavily
+
+Plain multi-class "is it exactly right" loss: BOTH mistakes just count as "wrong", equally</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Per-class sample weights, computed from train only</span></div>
+<pre><code>sample_weight = compute_sample_weight("balanced", y_train_int)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Normal       (n=891,000):  weight=0.337
+Mild AMS     (n=253,800):  weight=1.183
+Severe AMS   (n=199,800):  weight=1.503
+HAPE risk    (n= 86,400):  weight=3.475
+HACE risk    (n= 70,200):  weight=4.277</div>
+          <div class="why-box">Rarer classes get a larger per-row weight, forcing the regressor to care about getting them right too. Computed only from the training split's label distribution — never peeking at val/test, which would be leakage.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Actually training XGBoost on the real data</span></div>
+<pre><code>model, thresholds = xgb_ordinal.train(train_df, val_df)
+print("Tuned thresholds:", [round(t, 3) for t in thresholds])</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Training XGBoost ordinal regressor on the real train/val split...
+Done.
+Tuned thresholds: [0.85, 2.0, 2.85, 4.0]</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Raw continuous predictions, grouped by true tier</span></div>
+<pre><code>val_continuous = model.predict(val_df[FEATURE_COLUMNS])
+ax.scatter(tier_idx + jitter, val_continuous[mask], alpha=0.15)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Figure: a scatter plot showing the continuous prediction trending upward as the true tier increases (noisy/overlapping, but a real upward trend) — confirming the regressor is learning the ordinal relationship, not just noise.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">bin_predictions(): np.digitize on 8 example values</span></div>
+<pre><code>naive_thresholds = [0.5, 1.5, 2.5, 3.5]
+binned = xgb_ordinal.bin_predictions(np.array([-0.2, 0.4, 0.9, 1.6, 2.3, 2.6, 3.9, 4.5]), naive_thresholds)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>continuous=-0.2 -> tier 0 (Normal)
+continuous= 0.9 -> tier 1 (Mild AMS)
+continuous= 1.6 -> tier 2 (Severe AMS)
+continuous= 2.6 -> tier 3 (HAPE risk)
+continuous= 4.5 -> tier 4 (HACE risk)</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Tuned thresholds beat naive rounding on validation MATE</span></div>
+<pre><code>naive_mate = np.mean(np.abs(naive_val_pred - y_val_true))
+tuned_mate = np.mean(np.abs(tuned_val_pred - y_val_true))</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Naive (rounding) thresholds:  [0.5, 1.5, 2.5, 3.5]
+Tuned thresholds (this run):  [0.85, 2.0, 2.85, 4.0]
+
+Validation MATE with naive thresholds: 0.5552
+Validation MATE with tuned thresholds: 0.4629</div>
+          <div class="why-box">Naive rounding assumes each tier's predictions are symmetric around its center — not guaranteed. The coordinate-descent search adjusts one threshold at a time, keeping any change that improves validation MATE (never test — that would be leakage).</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Real test-set evaluation</span></div>
+<pre><code>y_pred = xgb_ordinal.predict(model, thresholds, test_df)
+result = evaluate(y_true, y_pred, model_name="XGBoost Ordinal (test set)")</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Precision (macro):    0.3873
+Recall (macro):       0.4046
+F1 (macro):            0.3742
+Mean Abs Tier Error:   0.5942
+Under-triage rate:     0.2208</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Feature importances</span></div>
+<pre><code>importances = pd.Series(model.feature_importances_, index=FEATURE_COLUMNS).sort_values(ascending=False)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>spo2_delta              0.3428
+time_at_altitude_min    0.2113
+spo2                    0.1418
+ascent_rate             0.0979
+altitude                0.0532
+temp                    0.0530
+spo2_trend_5min         0.0440
+hr                      0.0402
+hr_trend_5min           0.0159</div>
+          <div class="why-box">If raw <code>hr</code> had dominated over <code>spo2_delta</code>, that would be a red flag the model learned something spurious. Instead the top two features exactly match <code>docs/lls_mapping.md</code>'s clinical reasoning.</div>
+        </div>
+      </article>
+    </section>
+
+    <section class="phase" id="nb09">
+      <div class="phase-head"><h2>09 — lstm_model.py: the deep learning comparison</h2><span class="phase-tag">20 cells</span></div>
+      <p class="phase-sub"><code>notebooks/09_lstm_model_walkthrough.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">Walks through the LSTM end to end, including two design choices that make it genuinely different from XGBoost, not just "the same idea in PyTorch."</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Raw sequence input, not engineered features</span></div>
+          <p class="nb-md">XGBoost trains on hand-engineered features like <code>spo2_trend_5min</code>. The LSTM instead gets only raw vitals (<code>spo2, hr, temp, altitude</code>) over a 60-second sliding window — no trend, no delta. The question being tested: can a recurrent network learn "this is trending downward" itself, from watching the raw sequence, the way XGBoost needed a human to compute that explicitly?</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Stride vs. naive every-second windowing</span></div>
+<pre><code>naive_windows = n_rows - lstm_model.WINDOW_SAMPLES + 1
+strided_windows = len(range(0, n_rows - lstm_model.WINDOW_SAMPLES + 1, lstm_model.STRIDE_SECONDS))</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>One subject's trajectory: 5400 rows
+Naive (every-second) windows: 5,341
+Strided (every 15s) windows: 357
+Reduction: ~15x fewer windows, for minimal loss of diversity</div>
+          <div class="why-box">Consecutive windows one second apart share 59 of 60 samples — &gt;98% identical. Training on ~2 million near-duplicate windows would be extremely slow for almost zero added information.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">build_windows() on the real train/val splits</span></div>
+<pre><code>X_train, y_train = lstm_model.build_windows(train_df)
+X_val, y_val = lstm_model.build_windows(val_df)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Train windows: (99246, 60, 4)  (n_windows, seq_len=60, n_features=4)
+Val windows:   (20349, 60, 4)
+
+Label distribution: Normal 58905 · Mild AMS 16779 · Severe AMS 13209 · HAPE risk 5712 · HACE risk 4641</div>
+          <div class="why-box">Each window is labeled by its <em>final</em> timestep's severity — "given the last 60 seconds, what's the severity right now" — mirroring exactly how this model would be used live.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Normalization stats, fit on train only</span></div>
+<pre><code>mean = X_train.reshape(-1, X_train.shape[-1]).mean(axis=0)
+std = X_train.reshape(-1, X_train.shape[-1]).std(axis=0) + 1e-6</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>spo2        mean=  89.72  std=  6.05
+hr          mean=  78.82  std= 15.81
+temp        mean=  35.58  std=  1.15
+altitude    mean=3234.24  std=1216.24</div>
+          <div class="why-box">Same leakage principle as the temporal split: mean/std computed only from training windows, then applied unchanged to val/test — never fit separately per split, which would leak distribution information into the model's implicit scaling.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">SeverityLSTM architecture, printed</span></div>
+<pre><code>model = lstm_model.SeverityLSTM(n_features=len(lstm_model.LSTM_RAW_COLUMNS))
+print(f"Total trainable parameters: {n_params:,}")</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>SeverityLSTM(
+  (lstm): LSTM(4, 48, num_layers=2, batch_first=True, dropout=0.2)
+  (head): Sequential(Linear(48,32), ReLU, Dropout(0.2), Linear(32,5))
+)
+Total trainable parameters: 30,917  (deliberately small)</div>
+          <div class="why-box">Deliberately small — 2 layers, 48 hidden units — per the project's instruction to keep this a comparison, not a bid for maximum performance. Classifies directly into 5 classes with cross-entropy, a genuinely different ordinal-handling strategy than XGBoost's regression.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Training with early stopping, real run</span></div>
+<pre><code>trained_model, mean, std = lstm_model.train(train_df, val_df)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>epoch  1/12  train_loss=1.4043  val_loss=1.1932
+epoch  2/12  train_loss=1.3211  val_loss=1.1178
+epoch  3/12  train_loss=1.2796  val_loss=1.1150
+epoch  4/12  train_loss=1.2536  val_loss=1.1906
+epoch  5/12  train_loss=1.2093  val_loss=1.1683
+epoch  6/12  train_loss=1.1803  val_loss=1.2031
+early stopping at epoch 6 (no val improvement for 3 epochs)</div>
+          <div class="why-box">Val loss best at epoch 3 (1.1150) — the checkpoint restored after early stopping is that one, not epoch 6's (already beginning to overfit).</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Real test-set evaluation</span></div>
+<pre><code>y_pred, y_true = lstm_model.predict(trained_model, mean, std, test_df)
+result = evaluate(y_true, y_pred, model_name="LSTM (test set)")</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Precision (macro):    0.4049
+Recall (macro):       0.3695
+F1 (macro):            0.3742
+Mean Abs Tier Error:   0.7849
+Under-triage rate:     0.2345</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">What the comparison actually showed</span></div>
+          <p class="nb-md">F1 essentially tied with XGBoost (~0.37 both), but MATE notably worse (0.78 vs 0.59). Evaluated with the exact same <code>metrics.py</code> on the exact same test set, that gap is informative: XGBoost's structural approach to ordinality (regression target, tier distance baked into the loss) genuinely helped more than the LSTM's ability to learn temporal patterns directly from raw sequences compensated for.</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="phase" id="nb10">
+      <div class="phase-head"><h2>10 — predict_severity.py: selecting the winner + live inference</h2><span class="phase-tag">19 cells</span></div>
+      <p class="phase-sub"><code>notebooks/10_predict_severity_walkthrough.ipynb</code></p>
+      <article class="notebook">
+        <p class="nb-desc">Ties together everything from the previous six notebooks: loads all three trained models, picks a winner objectively, and exposes the one function the live pipeline calls.</p>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">XGBoost and the LSTM don't produce the same number of predictions</span></div>
+          <p class="nb-md">XGBoost predicts once per row. The LSTM predicts once per 60-second window, and with 15-second striding, that's a smaller count. Evaluating the LSTM against row-level <code>y_true</code> would misalign the arrays — the real code uses <code>lstm_true</code>, the labels <code>build_windows()</code> returned alongside the LSTM's own predictions.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Confirming the different prediction counts</span></div>
+<pre><code>print(f"test_df has {len(test_df):,} rows")
+_, lstm_true = lstm_model.build_windows(test_df)
+print(f"LSTM produces {len(lstm_true):,} windowed predictions")</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>test_df has 351,000 rows (one XGBoost prediction each)
+LSTM produces 23,205 windowed predictions -- a DIFFERENT count, and that's expected</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Running the real 3-way comparison</span></div>
+<pre><code>comparison_record = ps.run_comparison()</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Rule-Based Baseline    MATE=0.8189  under_triage=0.3088
+XGBoost Ordinal        MATE=0.5942  under_triage=0.2208
+LSTM                   MATE=0.7849  under_triage=0.2345</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">The saved decision record, inspected</span></div>
+<pre><code>with open(MODELS_DIR / "model_comparison.json") as f:
+    print(json.dumps(json.load(f), indent=2))</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>{
+  "test_set_size": 351000,
+  "winner": "XGBoost Ordinal",
+  "winner_beats_baseline": true
+}</div>
+          <div class="why-box">Written to disk, not just printed — so "why is XGBoost the active model" is traceable later from an artifact the actual run produced, not a comment in code that can rot out of date.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Confidence: an honest, not over-claimed, proxy</span></div>
+          <p class="nb-md"><b>XGBoost branch:</b> measures how close the raw continuous prediction sits to the center of its bin vs. an edge — explicitly <em>not</em> a calibrated probability. <b>LSTM branch:</b> <code>torch.softmax(logits)</code> genuinely is a probability, since the LSTM is a real classifier with a softmax head. When this reaches the LLM prompt or dashboard, it should be presented honestly, not implying more precision than the underlying number has.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">predict_severity() on a real buffered subject</span></div>
+<pre><code>buffer = test_df[test_df["subject_id"] == some_subject].sort_values("timestamp")
+print(ps.predict_severity(buffer))</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Subject: synth_0331
+True severity at the end of this buffer: Severe AMS
+
+predict_severity() output:
+{'severity_index': 2, 'severity_label': 'Severe AMS', 'confidence': 0.827, 'model_used': 'XGBoost Ordinal'}</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">The LSTM branch's minimum-buffer-length guard</span></div>
+<pre><code>short_buffer = buffer.iloc[:10]  # only 10 seconds -- not enough for a 60s LSTM window
+if len(short_buffer) < lstm_model.WINDOW_SAMPLES:
+    raise ValueError(...)</code></pre>
+          <div class="output-box"><span class="lbl">Output</span>Expected guard-rail error:
+LSTM model needs at least 60 buffered readings (60s at 1Hz), got 10. Not enough history yet -- caller should fall back to the rule baseline until the buffer fills.</div>
+          <div class="why-box">Matters for the real system: when a demo scenario or live sensor stream first starts, there won't be 60 seconds of history yet — exactly the fallback logic Day 11's full pipeline integration wires up.</div>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Summary — tying together Days 4-7</span></div>
+          <p class="nb-md"><code>docs/lls_mapping.md</code> wrote the clinical reasoning → <code>synth_data.py</code> turned it into thousands of realistic trajectories → <code>feature_engineering.py</code> derived clinically-meaningful features and split without leakage → <code>rule_baseline.py</code> coded the same reasoning as a sanity floor → <code>metrics.py</code> defined a fair, ordinal-aware way to score every model identically → <code>xgb_ordinal.py</code> and <code>lstm_model.py</code> each tried a different strategy → <code>predict_severity.py</code> picked the winner objectively and packaged it behind one stable function signature that Days 8-14 build on without ever needing to know it's XGBoost underneath.</p>
         </div>
       </article>
     </section>

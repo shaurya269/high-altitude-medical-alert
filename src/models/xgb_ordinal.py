@@ -59,6 +59,12 @@ def bin_predictions(continuous_preds: np.ndarray, thresholds: list[float]) -> np
     assert len(thresholds) == N_TIERS - 1, (
         f"Expected {N_TIERS - 1} thresholds for {N_TIERS} tiers, got {len(thresholds)}"
     )
+    # np.digitize returns, for each value, how many thresholds it's >= to --
+    # e.g. thresholds=[0.5,1.5,2.5,3.5] and pred=2.1 -> 2 (past 0.5 and 1.5,
+    # not past 2.5) -- which is exactly the tier index we want. .clip is a
+    # defensive guard against out-of-range predictions (e.g. a stray
+    # negative or >4.0 continuous output) rather than something expected
+    # to trigger often.
     return np.digitize(continuous_preds, thresholds).clip(0, N_TIERS - 1)
 
 
@@ -137,10 +143,14 @@ def tune_thresholds(y_val_true: np.ndarray, val_continuous_preds: np.ndarray) ->
     for _ in range(3):  # a few passes over all thresholds tends to converge
         for i in range(len(best_thresholds)):
             for offset in candidate_offsets:
-                trial = list(best_thresholds)
+                trial = list(best_thresholds)  # copy, not mutate best_thresholds -- this is a candidate to test, not yet a commitment
                 trial[i] = trial[i] + offset
                 # Keep thresholds monotonically increasing -- otherwise
-                # np.digitize's bucket ordering breaks down.
+                # np.digitize's bucket ordering breaks down. Checks the
+                # neighbor on each side (skipping the check entirely at the
+                # first/last index, since there's no neighbor there) with a
+                # small 0.05 buffer so thresholds can't collapse to be
+                # equal or crossed.
                 if not (
                     (i == 0 or trial[i] > trial[i - 1] + 0.05)
                     and (i == len(trial) - 1 or trial[i] < trial[i + 1] - 0.05)
@@ -194,7 +204,7 @@ def train(
         verbose=False,
     )
 
-    val_continuous_preds = model.predict(X_val)
+    val_continuous_preds = model.predict(X_val)  # continuous severity scores (e.g. 2.3), not yet binned to a discrete tier
     thresholds = tune_thresholds(y_val.to_numpy(), val_continuous_preds)
 
     return model, thresholds

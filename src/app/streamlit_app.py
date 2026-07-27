@@ -114,6 +114,11 @@ def render_demo_mode_panel() -> None:
             st.session_state.source_kind = "scenario"
 
     elif mode == "Manual sliders":
+        # Two separate `if` blocks, not if/else: before a pipeline exists,
+        # only the "Start" button shows; once started, only the sliders
+        # show. Both conditions are re-checked on every rerun (not just
+        # once), so the UI naturally flips from one state to the other the
+        # moment `st.session_state.pipeline` is set by the button click.
         if st.session_state.source_kind != "manual" or st.session_state.pipeline is None:
             if st.sidebar.button("Start manual override", type="primary"):
                 _new_pipeline(ManualDataSource())
@@ -331,7 +336,7 @@ def main() -> None:
     if st.session_state.auto_play and st.session_state.pipeline is not None:
         _do_tick()
         time.sleep(0.3)  # brief pause so the UI is watchable, not a 1:1 real-time simulation
-        st.rerun()
+        st.rerun()  # forces Streamlit to immediately re-run this whole script again, creating the "auto-play" illusion out of repeated single ticks
 
 
 if __name__ == "__main__":

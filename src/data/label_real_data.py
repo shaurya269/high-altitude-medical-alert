@@ -66,19 +66,24 @@ def label_real_dataframe(raw: pd.DataFrame) -> pd.DataFrame:
     data_source after engineer_features() since it doesn't preserve them.
     """
     frames = []
-    for subject_id, group in raw.groupby("subject_id"):
+    for subject_id, group in raw.groupby("subject_id"):  # one subject at a time -- see docstring on why rolling windows can't cross subjects
         result = engineer_features(group)
-        result["subject_id"] = subject_id
+        result["subject_id"] = subject_id  # engineer_features() doesn't carry this column through, so re-attach it from the groupby key
         if "data_source" in group.columns:
-            result["data_source"] = group["data_source"].iloc[0]
+            result["data_source"] = group["data_source"].iloc[0]  # same re-attachment, constant per group so .iloc[0] is enough
         frames.append(result)
     featured = pd.concat(frames, ignore_index=True)
 
+    # .apply(..., axis=1) runs classify_row() once per row (slower than a
+    # vectorized formula, but this only runs on real data at load time, not
+    # in a hot loop, and classify_row()'s branching logic isn't easily
+    # vectorized) -- reusing the exact same rule function rule_baseline.py
+    # itself evaluates against, per the module docstring's circularity note.
     severity_index = featured.apply(
         lambda row: classify_row(row["spo2_delta"], row["hr"], row["spo2_trend_5min"]),
         axis=1,
     )
     featured["severity_index"] = severity_index
-    featured["severity_label"] = severity_index.map(dict(enumerate(SEVERITY_TIERS)))
+    featured["severity_label"] = severity_index.map(dict(enumerate(SEVERITY_TIERS)))  # int index -> human-readable tier name, e.g. 2 -> "Severe AMS"
 
     return featured

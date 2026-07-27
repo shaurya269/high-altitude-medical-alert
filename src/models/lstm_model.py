@@ -72,10 +72,15 @@ def build_windows(df: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         if n < WINDOW_SAMPLES:
             continue  # trajectory too short for even one full window
 
+        # range(0, n - WINDOW_SAMPLES + 1, stride): every possible window
+        # start position, stepping STRIDE_SECONDS at a time instead of 1 --
+        # "+1" on the stop bound because range()'s upper bound is exclusive
+        # and the LAST valid start position must still leave room for a
+        # full WINDOW_SAMPLES-length slice before the trajectory ends.
         for start in range(0, n - WINDOW_SAMPLES + 1, STRIDE_SECONDS * SAMPLE_RATE_HZ):
             end = start + WINDOW_SAMPLES
             X_windows.append(values[start:end])
-            y_windows.append(labels[end - 1])
+            y_windows.append(labels[end - 1])  # label the window by its LAST timestep's severity, see docstring
 
     return np.stack(X_windows), np.array(y_windows)
 
@@ -154,6 +159,10 @@ def train(
     X_val, y_val = build_windows(val_df)
     print(f"LSTM windows -- train: {len(y_train):,}, val: {len(y_val):,}")
 
+    # X_train has shape (n_windows, WINDOW_SAMPLES, n_features); reshape
+    # flattens the window/timestep dims together so mean/std are computed
+    # per-feature ACROSS every timestep of every window (one mean/std per
+    # of the 4 LSTM_RAW_COLUMNS), not per-window or per-timestep.
     mean = X_train.reshape(-1, X_train.shape[-1]).mean(axis=0)
     std = X_train.reshape(-1, X_train.shape[-1]).std(axis=0) + 1e-6  # avoid div-by-zero
 

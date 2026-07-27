@@ -129,8 +129,8 @@ def has_harespod_data() -> bool:
     """Cheap existence check -- True once Data_Cons/<subject>/ folders are present."""
     cons_dir = HARESPOD_DIR / "Data_Cons"
     if not cons_dir.exists():
-        return False
-    return any(p.is_dir() for p in cons_dir.iterdir())
+        return False  # the whole harespod/ folder (or just Data_Cons/) isn't there at all
+    return any(p.is_dir() for p in cons_dir.iterdir())  # True the moment at least one subject folder exists inside it
 
 
 def _raise_not_downloaded() -> None:
@@ -164,7 +164,11 @@ def _rescale(normalized: pd.Series, device_range: tuple[float, float]) -> pd.Ser
     subject's true individual min/max, which isn't preserved in the
     downloaded archive.
     """
-    lo, hi = device_range
+    lo, hi = device_range  # unpack the (min, max) tuple, e.g. (70.0, 100.0) for SpO2
+    # clip(0, 1) first, defensively, in case of floating-point rounding just
+    # outside [0,1]; then the standard "unscale" formula: a value of 0.0
+    # normalized maps to `lo`, 1.0 maps to `hi`, and anything between is a
+    # straight linear blend (e.g. 0.5 normalized maps to the midpoint).
     return lo + normalized.clip(0, 1) * (hi - lo)
 
 
@@ -205,7 +209,7 @@ def _parse_key_timestamps(subject_dir: Path) -> list[tuple[str, int]]:
         r"(?:(\d+)(?:\s*/\s*[\d.]+)?|Start to Rec|Did not rise to this altitude)",
         re.MULTILINE,
     )
-    matches = pattern.findall(text)
+    matches = pattern.findall(text)  # list of (timestamp_string, altitude_digits_or_empty) tuples, one per regex match
     # Drop any "Did not rise to this altitude" entries -- these have an
     # empty ts capture too ('0000' isn't parseable as a real timestamp so
     # we don't even want to try), identified by having no altitude digits
@@ -214,6 +218,10 @@ def _parse_key_timestamps(subject_dir: Path) -> list[tuple[str, int]]:
     for ts, alt in matches:
         if not alt and ts == "0000":
             continue  # the "never reached this altitude" case -- drop it
+        # `alt` is a string like "1500", or an empty string for the "Start
+        # to Rec" case -- `int(alt) if alt else ...` converts to a real int
+        # when there are digits, otherwise falls back to the first stage
+        # altitude (1500m), which is what "Start to Rec" means for 314c.
         parsed.append((ts, int(alt) if alt else ALTITUDE_STAGE_METERS[0]))
 
     expected_max = len(ALTITUDE_STAGE_METERS)
@@ -258,25 +266,34 @@ def interpolate_altitude(timestamps: pd.Series, subject_dir: Path) -> pd.Series:
     overlap the vitals data at all, silently producing a constant 4000m
     (or 1500m) for the whole recording instead of a real ramp.
     """
-    markers = _parse_key_timestamps(subject_dir)
-    marker_times = pd.to_datetime([m[0] for m in markers])
-    marker_alts = np.array([m[1] for m in markers], dtype=float)
+    markers = _parse_key_timestamps(subject_dir)  # list of (timestamp_string, altitude_meters) pairs for this subject
+    marker_times = pd.to_datetime([m[0] for m in markers])  # extract just the timestamp half of each pair, parsed as real datetimes
+    marker_alts = np.array([m[1] for m in markers], dtype=float)  # extract just the altitude half, as a plain float array
 
-    data_start = pd.to_datetime(timestamps).min()
-    offset_hours = (marker_times[0] - data_start).total_seconds() / 3600
-    if abs(offset_hours - 8) < 0.1:
-        marker_times = marker_times - pd.Timedelta(hours=8)
-    elif abs(offset_hours) > 0.1:
+    data_start = pd.to_datetime(timestamps).min()  # this subject's actual recording start time (from the vitals data, not the markers)
+    offset_hours = (marker_times[0] - data_start).total_seconds() / 3600  # how many hours the FIRST marker is ahead of the data's own start
+    if abs(offset_hours - 8) < 0.1:  # within 0.1h of exactly 8 hours -> the documented GMT/local-time bug
+        marker_times = marker_times - pd.Timedelta(hours=8)  # shift every marker back by 8 hours to realign with the vitals data's clock
+    elif abs(offset_hours) > 0.1:  # neither ~0h (fine) nor ~8h (the known, correctable case) -> something unexpected
         raise ValueError(
             f"{subject_dir}: key_timestamp.txt markers are {offset_hours:.2f}h "
             "offset from the vitals data's own timestamps -- expected either "
             "~0h (no offset) or ~8h (the documented GMT/local-time case). "
             "Inspect this subject's files directly before trusting its altitude."
         )
+    # if abs(offset_hours) <= 0.1, no correction is needed -- markers already line up
 
+    # np.interp needs plain numbers to interpolate between, not datetime
+    # objects, so both the markers and the target timestamps are converted
+    # to Unix epoch seconds (int64 nanoseconds since 1970, divided down to
+    # seconds) before interpolating.
     marker_times_epoch = marker_times.astype("int64") / 1e9  # -> unix seconds
     ts_seconds = pd.to_datetime(timestamps).astype("int64") / 1e9
     return pd.Series(
+        # np.interp(x, known_x, known_y): for each timestamp in ts_seconds,
+        # find where it falls between the nearest two known markers and
+        # linearly interpolate the corresponding altitude. Points before the
+        # first marker or after the last one are clamped to that marker's value.
         np.interp(ts_seconds, marker_times_epoch, marker_alts),
         index=timestamps.index,
         name="altitude",
@@ -308,17 +325,19 @@ def load_subject(subject_id: str) -> pd.DataFrame:
             f"Available subjects: {available}"
         )
 
+    # header=None because the raw CSVs have no header row; names=[...] assigns
+    # column names ourselves since the files are just two bare numeric columns.
     hr_df = pd.read_csv(subject_dir / "hr_5cut.csv", header=None, names=["timestamp", "hr_norm"])
     spv_df = pd.read_csv(subject_dir / "spv_5cut.csv", header=None, names=["timestamp", "spv_norm"])
 
-    hr_df["timestamp"] = pd.to_datetime(hr_df["timestamp"])
+    hr_df["timestamp"] = pd.to_datetime(hr_df["timestamp"])  # parse the raw timestamp strings into real datetime objects
     spv_df["timestamp"] = pd.to_datetime(spv_df["timestamp"])
 
     # hr and spv are recorded by the same device in the same session and
     # both land on whole-second timestamps (verified: both files span the
     # identical wall-clock range with strict 1-second spacing), so an inner
     # merge on timestamp aligns them without needing resampling/interpolation.
-    merged = pd.merge(hr_df, spv_df, on="timestamp", how="inner")
+    merged = pd.merge(hr_df, spv_df, on="timestamp", how="inner")  # join the two files row-by-row wherever their timestamps match
     if merged.empty:
         raise ValueError(
             f"hr_5cut.csv and spv_5cut.csv for subject {subject_id} share no "
@@ -326,20 +345,20 @@ def load_subject(subject_id: str) -> pd.DataFrame:
             "recording session. Inspect the raw files before trusting this subject."
         )
 
-    merged["spo2"] = _rescale(merged["spv_norm"], SPO2_DEVICE_RANGE)
-    merged["hr"] = _rescale(merged["hr_norm"], HEART_RATE_DEVICE_RANGE)
-    merged["altitude"] = interpolate_altitude(merged["timestamp"], subject_dir)
+    merged["spo2"] = _rescale(merged["spv_norm"], SPO2_DEVICE_RANGE)  # [0,1] -> percent, via the physiological rescale
+    merged["hr"] = _rescale(merged["hr_norm"], HEART_RATE_DEVICE_RANGE)  # [0,1] -> bpm
+    merged["altitude"] = interpolate_altitude(merged["timestamp"], subject_dir)  # fill in a continuous altitude column from the chamber-stage markers
 
     # timestamp as seconds-from-recording-start, matching synth_data.py's
     # convention (0.0, 1.0, 2.0, ...) rather than absolute wall-clock time --
     # feature_engineering.py's rolling windows assume this convention.
-    start = merged["timestamp"].min()
-    merged["timestamp"] = (merged["timestamp"] - start).dt.total_seconds()
+    start = merged["timestamp"].min()  # this subject's very first timestamp, used as "time zero"
+    merged["timestamp"] = (merged["timestamp"] - start).dt.total_seconds()  # convert each row's datetime into "seconds since start" as a plain float
 
-    merged["subject_id"] = f"harespod_{subject_id}"
-    merged["data_source"] = "harespod_rescaled"
+    merged["subject_id"] = f"harespod_{subject_id}"  # prefix so real subjects are visually distinct from synthetic ones (e.g. "synth_0007")
+    merged["data_source"] = "harespod_rescaled"  # traceability tag -- see module docstring's CRITICAL LIMITATION section on why this matters
 
-    return merged[TIDY_COLUMNS].sort_values("timestamp").reset_index(drop=True)
+    return merged[TIDY_COLUMNS].sort_values("timestamp").reset_index(drop=True)  # keep only the standard columns, in time order, with a clean 0..N index
 
 
 def load_all_subjects() -> pd.DataFrame:

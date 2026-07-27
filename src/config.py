@@ -25,6 +25,10 @@ SYNTHETIC_DIR = DATA_DIR / "synthetic"
 PROCESSED_DIR = DATA_DIR / "processed"
 
 MODELS_DIR = PROJECT_ROOT / "src" / "models" / "artifacts"
+# Create the folder the first time this module is imported (parents=True
+# makes any missing parent dirs too; exist_ok=True means "don't error if
+# it's already there") so every training script can just write into it
+# without each one repeating its own os.makedirs() call.
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -42,8 +46,13 @@ SEVERITY_TIERS = [
     "HAPE risk",
     "HACE risk",
 ]
+# Dict comprehension: enumerate() pairs each tier name with its position
+# (0, 1, 2, ...), and this flips the list into a {name: index} lookup, e.g.
+# {"Normal": 0, "Mild AMS": 1, ...} -- so code elsewhere can go from a
+# human-readable label to the integer a model actually predicts, without
+# hardcoding "Severe AMS is index 2" in five different files.
 SEVERITY_INDEX = {name: i for i, name in enumerate(SEVERITY_TIERS)}
-N_TIERS = len(SEVERITY_TIERS)
+N_TIERS = len(SEVERITY_TIERS)  # 5 -- used anywhere code needs "how many tiers exist" without a magic number
 
 # ---------------------------------------------------------------------------
 # Clinical reference ranges (used by the rule-based baseline AND to sanity
