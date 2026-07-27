@@ -96,6 +96,53 @@ IMMEDIATE_STEPS = {
     ],
 }
 
+# A real boxes-and-arrows flow diagram for the System Info tab, built as
+# plain HTML/CSS rather than st.graphviz_chart -- graphviz needs the `dot`
+# binary installed on the host, which isn't guaranteed on Streamlit Cloud,
+# whereas this renders anywhere st.markdown(unsafe_allow_html=True) does.
+# The LLM Interpreter and Telegram Alert boxes are drawn side by side to
+# show they're a genuine fork after the hysteresis gate (pipeline.py calls
+# explain_severity() unconditionally every tick, but only calls
+# generate_alert_content()+send_alert() when the gate passes) -- not two
+# steps in one sequential chain.
+_ARCHITECTURE_DIAGRAM_HTML = """
+<style>
+.arch-flow { display: flex; flex-direction: column; align-items: center; gap: 4px; font-family: inherit; margin: 12px 0; }
+.arch-box { width: 100%; max-width: 560px; padding: 12px 18px; border-radius: 8px; text-align: center;
+  font-weight: 600; font-size: 14px; border: 1px solid rgba(128,128,128,0.25); background: rgba(128,128,128,0.06); }
+.arch-box .sub { display: block; font-weight: 400; font-size: 12px; color: #8FA3B8; margin-top: 2px; }
+.arch-arrow { color: #8FA3B8; font-size: 18px; line-height: 1; }
+.arch-fork { display: flex; gap: 16px; width: 100%; max-width: 560px; justify-content: center; }
+.arch-fork .arch-box { flex: 1; max-width: none; }
+.arch-box.stage1 { border-color: #8FA3B8; }
+.arch-box.stage2 { border-color: #5B8DEF; }
+.arch-box.stage3 { border-color: #2FB8A6; }
+.arch-box.stage4 { border-color: #E8A23D; }
+.arch-box.stage5 { border-color: #E8583D; }
+.arch-box.stage6a { border-color: #5B8DEF; }
+.arch-box.stage6b { border-color: #E8583D; }
+.arch-box.stage7 { border-color: #8B2E2E; }
+</style>
+<div class="arch-flow">
+  <div class="arch-box stage1">Demo Mode UI<span class="sub">scenario picker / manual sliders / Harespod replay</span></div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-box stage2">DataSource interface</div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-box stage3">Feature Engineering<span class="sub">rolling buffer &rarr; trend features</span></div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-box stage4">ML Severity Classifier<span class="sub">XGBoost, ordinal</span></div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-box stage5">Hysteresis Gate<span class="sub">persistence + cooldown check</span></div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-fork">
+    <div class="arch-box stage6a">LLM Interpreter (Groq)<span class="sub">always runs</span></div>
+    <div class="arch-box stage6b">Telegram Alert<span class="sub">only if gate passes</span></div>
+  </div>
+  <div class="arch-arrow">↓</div>
+  <div class="arch-box stage7">Streamlit Dashboard<span class="sub">live plots, chat, alert log</span></div>
+</div>
+"""
+
 
 # ---------------------------------------------------------------------------
 # Session state initialization -- runs once per browser session, not per
@@ -468,17 +515,7 @@ def render_alert_log() -> None:
 # ---------------------------------------------------------------------------
 def render_system_info() -> None:
     st.subheader("System architecture")
-    st.markdown(
-        "```\n"
-        "Demo Mode UI (scenario picker / manual sliders / Harespod replay)\n"
-        "        -> DataSource interface\n"
-        "        -> Feature Engineering (rolling buffer -> trend features)\n"
-        "        -> ML Severity Classifier (XGBoost, ordinal)\n"
-        "        -> Hysteresis Gate (persistence + cooldown check)\n"
-        "        -> [LLM Interpreter (Groq)]  +  [Telegram Alert (if gate passes)]\n"
-        "        -> Streamlit Dashboard (live plots, chat, alert log)\n"
-        "```"
-    )
+    st.markdown(_ARCHITECTURE_DIAGRAM_HTML, unsafe_allow_html=True)
     st.caption(
         "Every reading passes through all 7 stages above once per `.tick()` call. "
         "See `Architecture_Diagrams/01_system_architecture.html` for the full interactive diagram."
