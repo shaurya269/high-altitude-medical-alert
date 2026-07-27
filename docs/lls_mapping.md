@@ -75,6 +75,67 @@ labeling for this reason — see `CLAUDE.md` Section 5's Decision Log.
 Harespod, by contrast, is confirmed ambient-air (per its own paper's
 Methods section) and is the dataset this mapping is actually applied to.
 
+## Known limitation: under-triage vs. false-alarm tradeoff (Day 13 finding)
+
+Testing found that on the held-out synthetic test set, **45% of true
+HAPE-risk/HACE-risk readings get an XGBoost prediction below the
+hysteresis gate's alert-eligible tier (Severe AMS)** — meaning the
+Telegram alert (`src/alerts/hysteresis.py` + `alert_bot.py`) is never even
+*attempted* for nearly half the most dangerous cases, regardless of how
+well the consecutive-readings/cooldown logic itself behaves. This is a
+genuine gap in the current model's calibration, not a hysteresis bug —
+the gate is working exactly as designed, but the severity classification
+feeding into it is what's under-confident on the rarest, most dangerous
+tiers.
+
+**Two fixes were tried and both reverted** after concrete testing showed
+they traded this problem for a worse one — a real Telegram alert firing
+on a genuinely Normal demo scenario:
+
+1. **Bias `xgb_ordinal.py`'s threshold tuning to penalize under-triage
+   more than over-triage** (`UNDER_TRIAGE_PENALTY_WEIGHT` in that file).
+   At weight 3.0, this reduced the 45% figure to 26.8% — but caused 10/10
+   random-seed Normal scenarios to fire a false alert, because biasing the
+   *same* thresholds that separate Normal from Severe AMS pushes ordinary
+   sensor noise across that line often enough to satisfy the
+   3-consecutive-reading requirement. A gentler weight (1.5) reduced the
+   45% figure to 33.3% and still reliably caused false alerts (confirmed
+   across the first several random seeds before stopping). Reverted to
+   weight 1.0 (plain, symmetric mean-absolute-tier-error), matching the
+   original Days 4-7 model exactly.
+
+2. **Lower `config.HYSTERESIS_ALERT_TIER` from Severe AMS to Mild AMS**
+   instead, leaving the model's own classification thresholds untouched.
+   This improved HAPE/HACE coverage substantially (only 9.7% now fall
+   below the new, lower gate) — but failed for a related reason: 38% of
+   true-*Normal* readings already predict at/above Mild AMS at the
+   single-reading level (this model was never trained/tuned to separate
+   Normal from Mild AMS as tightly as it separates Normal from Severe
+   AMS), which is high enough to reliably sustain a 3-in-a-row streak too.
+   Confirmed via a live scenario test before reverting back to Severe AMS.
+
+**Both attempts hit the same underlying wall:** this specific XGBoost
+model's calibration doesn't currently support catching more true danger
+without also catching more false alarms, at any tier boundary tried so
+far. The system currently ships with the **original, well-tested
+configuration** (Severe AMS gate, symmetric threshold tuning) — meaning
+it is honestly biased toward fewer false alarms at the cost of missing
+some true elevated cases, which is a defensible but not ideal tradeoff
+point for a medical alert system to sit at by default.
+
+**Possible real fixes, not implemented here:**
+- Train a model (or a dedicated binary classifier) specifically optimized
+  to separate "Normal" from "everything else" as sharply as possible,
+  rather than relying on one multi-tier ordinal regression to do that
+  job well at every boundary simultaneously.
+- Require a second, independent signal to agree before alerting (e.g. the
+  LLM's own plain-language read of the vitals, or a longer/adaptive
+  consecutive-reading requirement specifically for lower-severity gates)
+  rather than gating on the ML classification alone.
+- Collect more real (non-synthetic) training data, particularly at the
+  Normal/Mild-AMS boundary specifically, since that's where both fix
+  attempts' false alarms concentrated.
+
 ## Sources (general references, not a single clinical trial)
 
 General high-altitude medicine literature on Acute Mountain Sickness, HAPE,

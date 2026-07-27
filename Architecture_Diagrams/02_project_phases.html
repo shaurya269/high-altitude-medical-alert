@@ -95,7 +95,7 @@ footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); fo
 
     <div class="day"><div class="day-num">12</div><div><div class="day-title">Streamlit Dashboard</div><div class="day-desc">src/app/streamlit_app.py · Demo Mode panel (scenario picker/sliders/replay) · live vitals + severity-index charts · chat tab · alert log tab · session_state-persisted pipeline across reruns · verified in a real headless browser (Playwright) AND via streamlit.testing.v1.AppTest in the automated suite</div></div><div class="status done">DONE</div></div>
 
-    <div class="day"><div class="day-num">13</div><div><div class="day-title">Testing &amp; Edge Cases</div><div class="day-desc">Replay recordings · inject synthetic HAPE trajectory · threshold tuning</div></div><div class="status pending">PENDING</div></div>
+    <div class="day"><div class="day-num">13</div><div><div class="day-title">Testing &amp; Edge Cases</div><div class="day-desc">All 15 real Harespod recordings replayed through the full pipeline: 0 exceptions, 0 rejected readings, correctly de-duplicated to 1 alert each · 6 hand-crafted edge cases (step-function drop, oscillating boundary, N-1/N streak boundaries, sensor glitch, empty source) all correct · found a real gap: 45% of true HAPE/HACE readings predict below the alert gate · two fix attempts (asymmetric threshold tuning, lowering the gate to Mild AMS) both tried, both caused false alerts on genuinely Normal scenarios, both reverted with full test verification · documented as a known limitation in docs/lls_mapping.md rather than shipped as a silent regression</div></div><div class="status done">DONE</div></div>
 
     <div class="day"><div class="day-num">14</div><div><div class="day-title">Demo Prep &amp; Docs</div><div class="day-desc">README · architecture screenshots · demo recording</div></div><div class="status pending">PENDING</div></div>
   </div>
@@ -107,7 +107,7 @@ footer{margin-top:50px; padding-top:20px; border-top:1px solid var(--border); fo
   </div>
 
   <footer>
-    <span>high-altitude-medical-alert · phases v1.3 · Days 1-12 complete (2026-07-27)</span>
+    <span>high-altitude-medical-alert · phases v1.4 · Days 1-13 complete (2026-07-27)</span>
     <span>Claude Code: update status cells + this footer's revision note on every completed phase</span>
   </footer>
 </div>

@@ -62,28 +62,77 @@ def bin_predictions(continuous_preds: np.ndarray, thresholds: list[float]) -> np
     return np.digitize(continuous_preds, thresholds).clip(0, N_TIERS - 1)
 
 
+
+# How much more we penalize an under-triage error (predicted tier < true
+# tier) than an equally-sized over-triage error, when tuning thresholds.
+#
+# Day 13 testing found that plain MATE-minimization (weight=1.0) left 45%
+# of true HAPE/HACE-risk rows predicted BELOW the hysteresis gate's
+# alert-eligible tier (Severe AMS) -- the alert would never even be
+# attempted for nearly half the most dangerous cases. Weighting under-
+# triage more heavily was tried to fix this (weight=3.0, then a gentler
+# weight=1.5) -- both reduced that 45% figure substantially, BUT both also
+# introduced a new, unacceptable failure: a genuinely Normal-severity demo
+# scenario started reliably triggering a real Telegram alert (10/10 random
+# seeds at weight=3.0; the first 3 tested at weight=1.5 also fired,
+# stopped there once the pattern was clearly systematic rather than
+# noise). The mechanism: any asymmetric bias toward predicting HIGHER
+# severity pushes ordinary sensor noise on a Normal trajectory across the
+# Severe-AMS threshold often enough to sustain hysteresis's consecutive-
+# reading requirement -- this isn't a tunable edge case, it's a direct
+# consequence of biasing the SAME thresholds that gate real (Normal-vs-
+# elevated) classifications, not just the dangerous tiers specifically.
+#
+# Reverted to weight=1.0 (plain, symmetric MATE -- identical to the
+# pre-Day-13 behavior) as the safe, well-tested default. The underlying
+# under-triage finding is real and worth addressing, but not via this
+# mechanism -- see the project owner's decision log / README for the
+# chosen path forward (e.g. lowering HYSTERESIS_ALERT_TIER instead, which
+# changes what severity the GATE watches for without distorting the
+# model's own tier boundaries).
+UNDER_TRIAGE_PENALTY_WEIGHT = 1.0
+
+
+def _asymmetric_tier_error(y_pred: np.ndarray, y_true: np.ndarray) -> float:
+    """
+    Like mean absolute tier error, but an under-triage error (pred < true)
+    counts UNDER_TRIAGE_PENALTY_WEIGHT times as much as an over-triage
+    error of the same size. This is the objective tune_thresholds()
+    actually searches over -- see UNDER_TRIAGE_PENALTY_WEIGHT's comment
+    for why the two directions aren't treated symmetrically.
+    """
+    error = y_pred - y_true
+    weights = np.where(error < 0, UNDER_TRIAGE_PENALTY_WEIGHT, 1.0)
+    return float(np.mean(np.abs(error) * weights))
+
+
 def tune_thresholds(y_val_true: np.ndarray, val_continuous_preds: np.ndarray) -> list[float]:
     """
-    Search for threshold cut points that minimize mean absolute tier error
-    on the validation set, rather than naively rounding to the nearest
-    integer.
+    Search for threshold cut points that minimize the ASYMMETRIC tier
+    error (see _asymmetric_tier_error) on the validation set, rather than
+    naive rounding OR plain (symmetric) mean absolute tier error.
 
-    Why not just round()? Rounding implicitly assumes each tier's continuous
-    predictions are symmetric around its center, which isn't guaranteed --
-    e.g. if the model systematically under-predicts severity for the rare
-    HACE class (a real risk given class imbalance), shifting that tier's
-    lower threshold down catches more true positives. This is a small grid
-    search per threshold, optimizing directly for the metric we report.
+    Why not just round(), and why not plain MATE either? Rounding
+    implicitly assumes each tier's continuous predictions are symmetric
+    around its center, which isn't guaranteed -- e.g. if the model
+    systematically under-predicts severity for the rare HACE class (a
+    real risk given class imbalance), shifting that tier's lower
+    threshold down catches more true positives. Plain MATE fixes the
+    "symmetric around center" assumption but still treats under- and
+    over-triage as equally costly, which Day 13 testing showed leaves a
+    dangerous gap (see UNDER_TRIAGE_PENALTY_WEIGHT). This is a small grid
+    search per threshold, optimizing directly for the asymmetric metric
+    that actually reflects what this system should be biased toward.
     """
     best_thresholds = [0.5, 1.5, 2.5, 3.5]  # naive-rounding starting point
-    best_mate = np.mean(
-        np.abs(bin_predictions(val_continuous_preds, best_thresholds) - y_val_true)
+    best_cost = _asymmetric_tier_error(
+        bin_predictions(val_continuous_preds, best_thresholds), y_val_true
     )
 
     # Coordinate-descent-style search: adjust one threshold at a time over a
-    # local grid, keep it if it improves mean absolute tier error. Cheap
-    # (few hundred evaluations) and avoids a full N-dimensional grid search
-    # over all 4 thresholds jointly, which isn't necessary here.
+    # local grid, keep it if it improves the asymmetric cost. Cheap (few
+    # hundred evaluations) and avoids a full N-dimensional grid search over
+    # all 4 thresholds jointly, which isn't necessary here.
     candidate_offsets = np.arange(-0.4, 0.41, 0.05)
     for _ in range(3):  # a few passes over all thresholds tends to converge
         for i in range(len(best_thresholds)):
@@ -98,9 +147,9 @@ def tune_thresholds(y_val_true: np.ndarray, val_continuous_preds: np.ndarray) ->
                 ):
                     continue
                 preds = bin_predictions(val_continuous_preds, trial)
-                mate = np.mean(np.abs(preds - y_val_true))
-                if mate < best_mate:
-                    best_mate = mate
+                cost = _asymmetric_tier_error(preds, y_val_true)
+                if cost < best_cost:
+                    best_cost = cost
                     best_thresholds = trial
 
     return best_thresholds

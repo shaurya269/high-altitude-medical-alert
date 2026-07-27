@@ -89,7 +89,36 @@ LSTM_WINDOW_SECONDS = 60      # comparison model's rolling window size
 # ---------------------------------------------------------------------------
 # Hysteresis gate (Stage 5) -- prevents a single noisy reading from firing
 # a Telegram alert. Tune these here, not inline in alerts/hysteresis logic.
-# ---------------------------------------------------------------------------
+#
+# KNOWN LIMITATION (Day 13 finding, two fix attempts tried and both
+# reverted -- see docs/lls_mapping.md "Under-triage vs. false-alarm
+# tradeoff" for the full writeup): 45% of true HAPE-risk/HACE-risk
+# readings get an XGBoost prediction BELOW Severe AMS on the held-out
+# synthetic test set, meaning the hysteresis gate never even attempts an
+# alert for nearly half the most dangerous cases.
+#
+#   Attempt 1 -- bias xgb_ordinal.py's threshold tuning to penalize
+#   under-triage more than over-triage. Reduced the 45% figure (to 26.8%
+#   at penalty weight 3.0), but reliably caused a genuinely Normal demo
+#   scenario to trigger a real false alert (10/10 random seeds). Reverted.
+#
+#   Attempt 2 -- lower HYSTERESIS_ALERT_TIER to Mild AMS instead (this
+#   constant), leaving the model's own thresholds untouched. Failed for a
+#   related reason: 38% of true-Normal readings already predict >= Mild
+#   AMS at the single-reading level (this model was never tuned to
+#   separate Normal from Mild AMS as tightly as Normal from Severe AMS),
+#   which is high enough to reliably sustain the 3-consecutive-reading
+#   streak too. Reverted back to Severe AMS.
+#
+# Both attempts hit the same underlying wall: this specific model's
+# calibration doesn't cleanly support catching more true danger without
+# also catching more false alarms, at ANY tier boundary tried so far.
+# Fixing this properly would need either a differently-trained model
+# (e.g. one explicitly optimized to separate Normal from everything else
+# more sharply) or a second, independent signal beyond the single ML
+# classification (e.g. requiring the LLM's interpretation to agree, or a
+# longer consecutive-reading requirement specifically for the Mild-AMS
+# gate) -- both are real future work, not implemented here.
 HYSTERESIS_ALERT_TIER = SEVERITY_INDEX["Severe AMS"]  # alert-eligible at/above this tier
 HYSTERESIS_CONSECUTIVE_READINGS = 3    # must sustain for N readings in a row
 HYSTERESIS_COOLDOWN_SECONDS = 15 * 60  # minimum gap between repeat alerts
