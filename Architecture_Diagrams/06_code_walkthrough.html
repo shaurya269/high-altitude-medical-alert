@@ -869,6 +869,7 @@ val = pd.read_csv(PROCESSED_DIR / "val.csv")
 test = pd.read_csv(PROCESSED_DIR / "test.csv")
 raw.shape, train.shape, val.shape, test.shape</code></pre>
           <div class="output-box"><span class="lbl">Output</span>((2160000, 7), (1501200, 14), (307800, 14), (351000, 14))</div>
+          <div class="why-box"><b>Reading the shapes:</b> <code>raw</code> has 7 columns (timestamp, spo2, hr, temp, altitude, subject_id, severity_label — the direct output of <code>synth_data.generate_dataset()</code>, before any feature engineering). The three splits jump to <b>14 columns</b ) — the extra 7 are the 5 engineered features (<code>spo2_trend_5min, hr_trend_5min, ascent_rate, spo2_delta, time_at_altitude_min</code>) plus <code>data_source</code> and <code>severity_index</code>, all added by <code>feature_engineering.py</code> (notebook 05). Row counts: 2,160,000 raw rows split roughly 70/15/15 into 1,501,200 / 307,800 / 351,000 — matching <code>config.py</code>'s <code>TRAIN_FRACTION=0.70</code>, <code>VAL_FRACTION=0.15</code>, <code>TEST_FRACTION=0.15</code> almost exactly (test looks slightly oversized relative to val here because the split is stratified per-tier by SUBJECT count, not row count, and tiers with longer average trajectories shift row totals slightly).</div>
         </div>
 
         <div class="nb-cell">
@@ -889,7 +890,7 @@ Normal 189000 · Mild AMS 54000 · Severe AMS 37800 · HAPE risk 16200 · HACE r
 
 test 65 subjects
 Normal 199800 · Mild AMS 59400 · Severe AMS 48600 · HACE risk 21600 · HAPE risk 21600</div>
-          <div class="why-box">Every tier appears in every split with real counts — the exact guarantee the stratified split (notebook 05) exists to provide.</div>
+          <div class="why-box">Every tier appears in every split with real counts — the exact guarantee the stratified split (notebook 05) exists to provide. Doing the arithmetic on train's subject count: 278 train + 57 val + 65 test = 400 total subjects, and 278/400 = 69.5% &asymp; 70%, 57/400 = 14.25% &asymp; 15%, 65/400 = 16.25% (slightly over 15% — HACE risk and HAPE risk, the rarest tiers, round up more aggressively per-tier because <code>temporal_split()</code>'s small-group fallback puts extra subjects into val/test rather than losing an entire tier from a split). Also notice HACE risk (21600) and HAPE risk (21600) are TIED in the test row despite HACE being rarer overall (70200 vs 86400 train rows) — a reminder that these row counts are subject-count-driven, not independently sampled per tier.</div>
         </div>
 
         <div class="nb-cell">
@@ -969,6 +970,15 @@ Alert-eligible at tier >= 2 (Severe AMS)
 Must sustain for 3 consecutive readings
 Cooldown between alerts: 900 seconds = 15 minutes</div>
           <div class="why-box"><b>SAMPLE_RATE_HZ = 1:</b> Harespod's raw data is 100Hz, but a real Arduino polling I2C sensors realistically can't sustain that — 1Hz is the realistic target rate. Every timing-aware module reads this constant rather than hardcoding "60" or "300".</div>
+          <div class="table-wrap"><table>
+            <tr><th>Constant</th><th>Value</th><th>What it actually controls</th></tr>
+            <tr><td><code>ROLLING_BUFFER_MINUTES</code></td><td>10</td><td>How much trailing history <code>ReadingBuffer</code> (Stage 2) keeps in memory per subject — old readings beyond 10 minutes are dropped, since nothing downstream needs more than that to compute a 5-minute trend or a 60-second LSTM window.</td></tr>
+            <tr><td><code>TREND_WINDOW_MINUTES</code></td><td>5</td><td>The lookback window for <code>spo2_trend_5min</code>/<code>hr_trend_5min</code> — at 1Hz this is 300 samples, the <code>TREND_WINDOW_SAMPLES</code> constant used inside <code>engineer_features()</code>'s vectorized slope calculation.</td></tr>
+            <tr><td><code>LSTM_WINDOW_SECONDS</code></td><td>60</td><td>Exact input sequence length the LSTM was trained on and requires at inference — <code>predict_severity()</code> raises a clear error rather than silently padding if a live buffer has fewer than 60 readings.</td></tr>
+            <tr><td><code>HYSTERESIS_ALERT_TIER</code></td><td>2 (Severe AMS)</td><td>The minimum severity index that counts toward the alert streak — a Mild AMS or Normal reading never advances the counter, no matter how many in a row.</td></tr>
+            <tr><td><code>HYSTERESIS_CONSECUTIVE_READINGS</code></td><td>3</td><td>How many readings IN A ROW must be &ge; the alert tier before the gate is even eligible to fire — a single dip back to Mild AMS resets this counter to 0 (see <code>hysteresis.py</code>, notebook 06's alert-gate logic mirrored in <code>src/alerts/</code>).</td></tr>
+            <tr><td><code>HYSTERESIS_COOLDOWN_SECONDS</code></td><td>900 (15 min)</td><td>Minimum real-world time between two alerts firing for the same subject, even if severity has stayed elevated the entire time — prevents the Telegram bot from spamming one message per second during a sustained episode.</td></tr>
+          </table></div>
         </div>
 
         <div class="nb-cell">
@@ -1015,6 +1025,7 @@ Mild AMS      spo2_delta=(4, 8)     hr_elev=(10, 20)  progressive=False
 Severe AMS    spo2_delta=(8, 14)    hr_elev=(20, 35)  progressive=False
 HAPE risk     spo2_delta=(14, 22)   hr_elev=(28, 45)  progressive=True
 HACE risk     spo2_delta=(16, 26)   hr_elev=(32, 50)  progressive=True</div>
+          <div class="why-box">Notice these ranges deliberately OVERLAP at the boundaries (Severe AMS tops out at 14, HAPE risk starts at 14; Severe AMS's HR band goes to 35, HAPE risk's starts at 28) — real physiology doesn't have hard cutoffs between adjacent illness tiers either, and a model that can't handle some ambiguity at tier boundaries would be learning a false certainty the data itself doesn't support. Each subject's actual value is drawn <em>uniformly at random</em> from within its tier's range (e.g. <code>rng.uniform(8, 14)</code> for a Severe AMS subject's spo2_delta target) — this is what makes two different "Severe AMS" subjects look like different people rather than clones of the same template patient.</div>
         </div>
 
         <div class="nb-cell">
@@ -1029,6 +1040,13 @@ HACE risk     spo2_delta=(16, 26)   hr_elev=(32, 50)  progressive=True</div>
     ax.plot(np.arange(n) / 60, ramp, label=f"onset_fraction={onset_fraction}")</code></pre>
           <div class="output-box"><span class="lbl">Output</span>Figure: 3 sigmoid curves, each flat at 0 then rising smoothly to ~1.0, starting at different points along the 90-minute window.</div>
           <div class="why-box"><b>Why not a step function?</b> A model trained on instant jumps would learn to detect abrupt discontinuities, not real gradual physiological deterioration, and would generalize poorly to an actual, slowly-worsening patient.</div>
+          <div class="table-wrap"><table>
+            <tr><th>Parameter</th><th>Meaning</th></tr>
+            <tr><td><code>n_samples</code></td><td>Total length of the trajectory in samples (duration_minutes &times; 60 at 1Hz) — the ramp array is exactly this long.</td></tr>
+            <tr><td><code>onset_fraction</code></td><td>Where along the trajectory symptoms START appearing, as a fraction of total duration (e.g. 0.35 means the ramp stays at 0 for the first 35% of the window, then begins rising). Randomized per-subject within a range, so not every subject in the same tier gets sick at exactly the same minute.</td></tr>
+            <tr><td><code>center</code>, <code>width</code></td><td>The sigmoid's midpoint and steepness, both derived from <code>onset_fraction</code> and the remaining trajectory length — <code>center</code> is placed halfway through the remaining time after onset starts, <code>width</code> scales with how much time is left, so the curve always has room to rise smoothly rather than looking clipped.</td></tr>
+            <tr><td><code>1 / (1 + exp(-(t - center) / width))</code></td><td>The logistic sigmoid formula itself: at <code>t = center</code> the ramp is exactly 0.5 (half onset); far before center it's ~0, far after it's ~1. This is the same mathematical function used as an activation in the LSTM (notebook 09) — here it's shaping a symptom curve instead of a neuron's output, but the S-shape (slow start, fast middle, plateau) is identical.</td></tr>
+          </table></div>
         </div>
 
         <div class="nb-cell">
@@ -1045,7 +1063,13 @@ HACE risk     spo2_delta=(16, 26)   hr_elev=(32, 50)  progressive=True</div>
 print(small_dataset["severity_label"].value_counts(normalize=True).round(3))</code></pre>
           <div class="output-box"><span class="lbl">Output</span>72,000 rows, 60 subjects
 Normal 0.450 · Mild AMS 0.267 · Severe AMS 0.167 · HAPE risk 0.117</div>
-          <div class="why-box">Close to the target <code>TIER_PREVALENCE</code>, with natural sampling noise from only 60 subjects — the real run uses 400 subjects, tracking the target proportions much more tightly (see notebook 01).</div>
+          <div class="why-box">Close to the target <code>TIER_PREVALENCE</code> (Normal 0.55, Mild AMS 0.22, Severe AMS 0.13, HAPE risk 0.06, HACE risk 0.04), with natural sampling noise from only 60 subjects — the real run uses 400 subjects, tracking the target proportions much more tightly (see notebook 01). Notice HACE risk doesn't even appear in this small sample's output at all: at a true 4% prevalence, 60 subjects &times; 0.04 = 2.4 expected HACE-risk subjects — entirely plausible to draw zero by chance with <code>rng.choice(tiers, p=probs)</code>'s random sampling. This is the exact small-sample risk notebook 05's temporal-split bug exploited (a rare tier can vanish from a subset purely by chance), which is also why the REAL dataset generation always uses 400 subjects, not 60 — enough that even the rarest tier (4% of 400 &asymp; 16 subjects) reliably has enough subjects to split across train/val/test.</div>
+          <div class="table-wrap"><table>
+            <tr><th>generate_dataset() parameter</th><th>Value used</th><th>Effect</th></tr>
+            <tr><td><code>n_subjects</code></td><td>400 (real run) / 60 (demo above)</td><td>Total population size — directly trades off training-data volume against generation time (400 subjects &times; 90 min &times; 1Hz = 2.16M rows).</td></tr>
+            <tr><td><code>duration_minutes</code></td><td>90 (real run) / 20 (demo above)</td><td>Length of each individual subject's trajectory — shorter demo runs finish faster but give the sigmoid onset ramp less room to fully develop.</td></tr>
+            <tr><td><code>seed</code></td><td><code>RANDOM_SEED=42</code> (real run) / 1 (demo above)</td><td>Controls every random draw inside generation (which tier each subject gets, their individual profile values, sensor noise) — same seed always reproduces the identical dataset, different seed gives a different-but-statistically-similar one.</td></tr>
+          </table></div>
         </div>
       </article>
     </section>
@@ -1101,6 +1125,7 @@ averaged = fake_100hz.groupby(np.arange(len(fake_100hz)) // 100).mean().reset_in
 Strided (1Hz) std:     2.81  &lt;- preserves real per-sample noise
 Averaged (1Hz) std:    0.29  &lt;- artificially smoothed, understates noise</div>
           <div class="why-box"><b>Why stride, not average:</b> our models need to learn to handle noisy readings, because that's what the real Arduino will actually produce. Averaging every 100 samples down to 1 would smooth out real sensor noise and make the models overconfident about clean signals.</div>
+          <div class="why-box"><b>Reading the standard deviations:</b> a standard deviation (std) measures how spread-out a set of values is around its mean — the original 100Hz noisy signal has std=2.93 (values regularly deviate ~3 units from the mean by chance). <code>strided = fake_100hz.iloc[::100]</code> (Python's slice-step syntax, meaning "every 100th element starting from index 0") keeps std=2.81 — nearly identical to the original, because each kept sample is still one genuinely noisy reading, just fewer of them. <code>averaged</code> instead computes the MEAN of each consecutive 100-sample block (via <code>groupby(np.arange(len) // 100)</code> — integer division groups indices 0-99 together, 100-199 together, etc.) — averaging 100 independent noisy samples together mathematically shrinks the noise by a factor of &radic;100=10, which is exactly why std drops to 0.29 (2.93 / 10 &asymp; 0.29). That 10x reduction is the averaging artifact this cell exists to demonstrate and avoid.</div>
         </div>
 
         <div class="nb-cell">
@@ -1125,6 +1150,7 @@ featured[["timestamp","spo2","spo2_trend_5min","altitude","ascent_rate","spo2_de
 timestamp=1500  spo2=89.13  spo2_delta=1.33   altitude=2513   time_at_altitude=0.12
 timestamp=1800  spo2=87.58  spo2_delta=2.28   altitude=2714   time_at_altitude=5.12
 timestamp=2700  spo2=85.28  spo2_delta=?      altitude=2714   time_at_altitude=15.12</div>
+          <div class="why-box">Walking through what each column means at <code>timestamp=1800</code> (30 minutes in): <code>altitude=2714</code>m means the subject has finished ascending and is now cruising (compare to <code>altitude=2513</code>m 5 minutes earlier — the climb has essentially stopped). <code>spo2_delta=2.28</code> means actual SpO2 is 2.28 percentage points BELOW what <code>expected_spo2(2714)</code> predicts for a healthy person at that altitude — a small but real deviation, consistent with early HAPE-risk onset. <code>time_at_altitude=5.12</code> (minutes) means only 5 minutes have passed since altitude first crossed the 2500m risk threshold (<code>ALTITUDE_RISK_ONSET_M</code>) — this number keeps climbing linearly with wall-clock time from here on, independent of whether altitude itself changes further, since it's tracking cumulative EXPOSURE, not current position.</div>
         </div>
 
         <div class="nb-cell">
@@ -1177,6 +1203,12 @@ for name, split in [("train", train_s), ("val", val_s), ("test", test_s)]:
 val:   ['HAPE risk', 'Mild AMS', 'Normal', 'Severe AMS']
 test:  ['HAPE risk', 'Mild AMS', 'Normal']</div>
           <div class="fix-box"><b>Fix:</b> group subjects by tier first, then apply the same chronological cut within each tier's own subject list — still no row-shuffling, but every tier's split guarantee now holds independently rather than being left to chance. Became a permanent regression test.</div>
+          <div class="table-wrap"><table>
+            <tr><th>temporal_split() parameter / rule</th><th>Value</th><th>What it does</th></tr>
+            <tr><td><code>train_frac</code>, <code>val_frac</code></td><td>0.70, 0.15 (from config.py)</td><td>Within EACH tier's own sorted subject list, the first 70% of subjects (chronologically) go to train, the next 15% to val, and the remainder (also ~15%) to test.</td></tr>
+            <tr><td>Small-group fallback</td><td>if a tier has &lt; 3 subjects</td><td>All of that tier's subjects go to train only — better to have zero val/test examples of an ultra-rare tier than to force a 70/15/15 split on, say, 2 subjects (which would mean a fractional subject, meaningless).</td></tr>
+            <tr><td>Sort key</td><td><code>subject_id</code>, ascending</td><td>A proxy for generation/collection order — subject IDs are assigned sequentially (<code>synth_0000, synth_0001, ...</code>), so sorting by ID approximates "earliest generated first," preserving a time-like ordering without a real collection timestamp per subject.</td></tr>
+          </table></div>
         </div>
 
         <div class="nb-cell">
@@ -1193,6 +1225,35 @@ test:  ['HAPE risk', 'Mild AMS', 'Normal']</div>
         <p class="nb-desc">This model must exist before XGBoost or the LSTM are trusted. If a sophisticated model can't clearly beat a handful of hand-written if/else rules, that's a red flag about features or labels, not evidence the ML approach is wrong.</p>
 
         <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">The full cascading decision tree, parameter by parameter</span></div>
+          <p class="nb-md">This is the entire model. No training, no gradient descent, no learned weights — every threshold below is a literature-derived number from <code>docs/lls_mapping.md</code>, hand-typed into <code>classify_row()</code>. Reading it top to bottom as a clinician's checklist:</p>
+<pre><code>def classify_row(spo2_delta, hr, spo2_trend_5min):
+    hr_elevation = hr - HR_NORMAL_MID          # HR_NORMAL_MID = 75 (midpoint of the 50-100bpm resting band)
+    steep_negative_trend = spo2_trend_5min < -0.15   # % SpO2 lost per second, sustained
+
+    if spo2_delta >= 16 or (spo2_delta >= 10 and steep_negative_trend):
+        if spo2_delta >= 20 and hr_elevation >= 35:
+            return "HACE risk"
+        return "HAPE risk"
+    if spo2_delta >= 8 or hr_elevation >= 20:
+        return "Severe AMS"
+    if spo2_delta >= 4 or hr_elevation >= 10:
+        return "Mild AMS"
+    return "Normal"</code></pre>
+          <div class="table-wrap"><table>
+            <tr><th>Parameter</th><th>Value</th><th>Meaning</th></tr>
+            <tr><td><code>spo2_delta</code></td><td>float, %</td><td><code>expected_spo2(altitude) − actual_spo2</code>. Positive = worse than altitude-adjusted expectation. This is the single most important number in the whole rule tree — every threshold below is written in terms of it, never raw SpO2.</td></tr>
+            <tr><td><code>hr_elevation</code></td><td><code>hr − 75</code></td><td>How far above the population-normal resting midpoint (not the individual's own baseline — a hand-written rule has no memory of one specific patient) the current heart rate sits.</td></tr>
+            <tr><td><code>steep_negative_trend</code></td><td>bool, threshold <code>-0.15</code></td><td>True when SpO2 is falling faster than 0.15 percentage points per second, sustained over the trailing 5-minute window (<code>spo2_trend_5min</code>, computed by <code>feature_engineering.py</code>). Lets the model flag a rapidly-worsening case before the absolute deviation alone would.</td></tr>
+            <tr><td><code>16</code>, <code>10</code></td><td>% delta</td><td>The two ways into HAPE/HACE territory: either the deviation alone is extreme (&ge;16%), OR a smaller deviation (&ge;10%) combined with a steep negative trend — "early HAPE can desaturate fast," per the clinical mapping doc.</td></tr>
+            <tr><td><code>20</code> + <code>35</code></td><td>% delta + bpm</td><td>Within the HAPE/HACE danger zone, escalating to HACE specifically requires BOTH an even more extreme deviation (&ge;20%) AND strongly elevated HR (&ge;35bpm over the 75bpm midpoint) — modeling HACE as the more decompensated end of the same spectrum, not a separate condition.</td></tr>
+            <tr><td><code>8</code>, <code>20</code></td><td>% delta / bpm</td><td>Severe AMS cutoffs — either signal alone is sufficient (an <code>or</code>, not <code>and</code>).</td></tr>
+            <tr><td><code>4</code>, <code>10</code></td><td>% delta / bpm</td><td>Mild AMS cutoffs — the lowest tier above Normal.</td></tr>
+          </table></div>
+          <div class="why-box">Every branch is an <code>if</code>, checked in order from most-severe to least — the moment a condition is met, that tier is returned and nothing lower gets checked. This cascading structure is why the ordering of the checks matters as much as the threshold values themselves.</div>
+        </div>
+
+        <div class="nb-cell">
           <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">classify_row() walked through by hand on 5 cases</span></div>
 <pre><code>examples = [
     dict(spo2_delta=1.0,  hr=75,  spo2_trend_5min=0.0,   note="near-normal reading"),
@@ -1205,7 +1266,7 @@ mild deviation                             -> Mild AMS
 severe deviation, stable trend             -> Severe AMS
 same deviation, but STEEP negative trend   -> HAPE risk
 extreme deviation + high HR                -> HACE risk</div>
-          <div class="why-box">Rows 3 and 4 have the identical <code>spo2_delta</code> (11.0) — the only difference is trend (stable vs. steep negative). That's the trend-aware branch catching a rapidly-worsening case before the absolute deviation alone would flag it.</div>
+          <div class="why-box">Rows 3 and 4 have the identical <code>spo2_delta</code> (11.0) — the only difference is trend (stable vs. steep negative). That's the trend-aware branch catching a rapidly-worsening case before the absolute deviation alone would flag it. Tracing row 4 by hand through the tree above: <code>spo2_delta=22 &ge; 16</code> → enters the HAPE/HACE branch; then <code>22 &ge; 20 AND (120-75=45) &ge; 35</code> → both true → escalates all the way to HACE risk.</div>
         </div>
 
         <div class="nb-cell">
@@ -1227,11 +1288,24 @@ Recall (macro):       0.2870
 F1 (macro):            0.2845
 Mean Abs Tier Error:   0.8189
 Under-triage rate:     0.3088</div>
+          <div class="why-box">Reading each number as what it actually measures (see notebook 07 for the full derivation): <b>Precision 0.349</b> — averaged equally across all 5 tiers, when the baseline predicts a given tier it's correct about 35% of the time on average. <b>Recall 0.287</b> — of all rows truly belonging to a given tier, only ~29% get correctly labeled that tier on average. <b>MATE 0.819</b> — predictions are, on average, 0.82 tiers away from the truth (e.g. a true Severe AMS row often lands on Mild AMS or HAPE risk, not exactly Severe AMS). <b>Under-triage 0.309</b> — 31% of all predictions call something LESS severe than it truly is, the clinically dangerous direction.</div>
         </div>
 
         <div class="nb-cell">
-          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Reading the confusion matrix</span></div>
-          <p class="nb-md">The baseline correctly identifies a good chunk of Normal and Mild AMS. It's noticeably weaker distinguishing HAPE risk from HACE risk — both occupy the same "large deviation" region of the rule tree, and the HACE-specific sub-condition is a narrow slice. This is expected, and exactly the weakness XGBoost's learned thresholds (notebook 08) improve on.</p>
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Reading the confusion matrix in detail</span></div>
+          <p class="nb-md">The confusion matrix's rows are the actual tier, columns are the predicted tier — reading row-by-row shows exactly where each true class's rows ended up:</p>
+<pre><code class="cm">          Normal  Mild AMS  Severe AMS  HAPE risk  HACE risk
+Normal    128708     51082       20010          0          0
+Mild AMS   36715     19086        3599          0          0
+Severe    21283     10299       17018          0          0
+HAPE       8814      3914        5893       2439        540
+HACE      10659      2431        4151       4225        134</code></pre>
+          <p class="nb-md">The two most striking things in this table: <b>(1)</b> the rule tree literally cannot predict "HAPE risk" or "HACE risk" for a row whose true tier is Normal or Mild AMS or Severe AMS — those two columns are 0 in the first three rows, because reaching the HAPE/HACE branch requires <code>spo2_delta &ge; 10</code>, a threshold Normal/Mild/Severe rows structurally can't cross. <b>(2)</b> Look at the HACE row: only 134 of (10659+2431+4151+4225+134 &asymp; 21600) true HACE-risk rows are correctly labeled HACE — the model calls most true HACE cases "Normal" (10659!) or "HAPE risk" (4225) instead. That 10659 number is the single worst cell in the whole matrix, and it's exactly what <code>under_triage_rate</code> is designed to surface: a true HACE-risk reading being called "Normal" is about as dangerous a miss as this system can make.</p>
+        </div>
+
+        <div class="nb-cell">
+          <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Why the baseline struggles specifically with HACE vs. Normal</span></div>
+          <p class="nb-md">This isn't a bug — it's the baseline correctly exposing its own structural blind spot. A true HACE-risk row lands in this matrix's "Normal" column when its <em>engineered features at that specific row</em> (spo2_delta, hr_elevation, trend) happen to look mild — for instance, early in the sigmoid-onset ramp (see <code>synth_data.py</code>, notebook 03) before symptoms have fully developed, even though the trajectory's overall label is HACE risk. The rule tree has no memory of "this subject has been trending toward HACE for the last 20 minutes" — it judges each row in isolation from that row's own numbers, which is exactly the kind of temporal, trajectory-level context that XGBoost's <code>time_at_altitude_min</code> feature and the LSTM's whole raw-sequence design (notebooks 08 and 09) are built to capture instead.</p>
         </div>
       </article>
     </section>
@@ -1252,6 +1326,14 @@ print("macro F1:", f1_score(y_true, y_pred, average='macro', labels=[0,4]))</cod
 weighted F1: 0.943  &lt;- still looks great, same problem
 macro F1:    0.49   &lt;- correctly exposes that this model NEVER catches HACE risk</div>
           <div class="why-box">This is the exact failure mode macro-averaging exists to expose: a model silently useless on the rare, dangerous class can hide behind a good micro/weighted score.</div>
+          <div class="table-wrap"><table>
+            <tr><th>Term</th><th>Formula</th><th>Meaning</th></tr>
+            <tr><td>Precision (per class)</td><td>TP / (TP + FP)</td><td>Of everything the model LABELED this tier, what fraction actually was — "when it says Severe AMS, how often is it right?"</td></tr>
+            <tr><td>Recall (per class)</td><td>TP / (TP + FN)</td><td>Of everything that TRULY IS this tier, what fraction did the model catch — "of all real Severe AMS cases, how many did it find?"</td></tr>
+            <tr><td>F1 (per class)</td><td>2 &times; (precision &times; recall) / (precision + recall)</td><td>The harmonic mean of precision and recall — punishes a model that's great at one but terrible at the other (unlike a plain average, which would let a high precision hide a low recall).</td></tr>
+            <tr><td>Macro average</td><td>mean of the 5 per-class scores, unweighted</td><td>Normal's score and HACE risk's score count EQUALLY, even though Normal has ~14x more rows in this toy example (1000 vs. 40) — this is what exposes the always-predict-Normal model above.</td></tr>
+            <tr><td>Micro average</td><td>pool ALL predictions together first, then compute one global score</td><td>Equivalent to weighting each class by how many rows it has — Normal's 1000 correct predictions swamp HACE's 40 wrong ones in the pooled total.</td></tr>
+          </table></div>
         </div>
 
         <div class="nb-cell">
@@ -1261,6 +1343,7 @@ model_b_pred = np.array([4, 4, 0, 0, 0])   # sometimes exactly right, sometimes 
           <div class="output-box"><span class="lbl">Output</span>Model A: accuracy=0.00  MATE=1.00  (consistently close, never exactly right)
 Model B: accuracy=0.00  MATE=3.20  (right sometimes, catastrophically wrong other times)</div>
           <div class="why-box">Same 0% accuracy for both — the point is MATE tells them apart when plain accuracy can't, exactly what an ordinal metric needs to do.</div>
+          <div class="why-box"><b>The arithmetic behind Model A's MATE=1.00:</b> true tiers are <code>[0,1,2,3,4]</code>, Model A predicts <code>[1,0,1,4,3]</code>. Absolute errors per row: |1-0|=1, |0-1|=1, |1-2|=1, |4-3|=1, |3-4|=1 — every single prediction is off by exactly 1 tier, so the mean is 1.0. <b>Model B's MATE=3.20:</b> predicts <code>[4,4,0,0,0]</code> against the same truth — errors are |4-0|=4, |4-1|=3, |0-2|=2, |0-3|=3, |0-4|=4, averaging to (4+3+2+3+4)/5 = 3.2. Both models score 0% exact-match accuracy, but Model A's mistakes are all "off by one tier" (arguably tolerable — a Severe AMS case called Mild AMS or HAPE risk is still in the right neighborhood) while Model B's mistakes swing wildly (a true HACE-risk case called Normal). MATE is the metric that tells these two very different failure modes apart.</div>
         </div>
 
         <div class="nb-cell">
@@ -1321,6 +1404,19 @@ print("Tuned thresholds:", [round(t, 3) for t in thresholds])</code></pre>
           <div class="output-box"><span class="lbl">Output</span>Training XGBoost ordinal regressor on the real train/val split...
 Done.
 Tuned thresholds: [0.85, 2.0, 2.85, 4.0]</div>
+          <div class="table-wrap"><table>
+            <tr><th>XGBRegressor parameter</th><th>Value</th><th>What it controls</th></tr>
+            <tr><td><code>n_estimators</code></td><td>300</td><td>Number of decision trees built sequentially. Each new tree is trained to correct the ERRORS of all trees built before it (gradient boosting) — more trees can capture finer patterns but risk overfitting past a point, which is why <code>early_stopping_rounds</code> below caps this in practice.</td></tr>
+            <tr><td><code>max_depth</code></td><td>5</td><td>Maximum depth of each individual tree — how many yes/no splits deep a single tree can go before making a prediction. Shallower trees (like 5) are weaker individually but generalize better and combine well in an ensemble; deep trees would each risk memorizing training-set noise.</td></tr>
+            <tr><td><code>learning_rate</code></td><td>0.05</td><td>How much each new tree's correction gets scaled down before being added to the running prediction — a small value like 0.05 means each tree only nudges the prediction slightly, requiring more trees (hence <code>n_estimators=300</code>) but producing a smoother, less overfit-prone ensemble than a few large corrections would.</td></tr>
+            <tr><td><code>subsample</code></td><td>0.8</td><td>Each tree only trains on a random 80% of the training ROWS, resampled fresh per tree — a standard anti-overfitting technique (a tree can't perfectly memorize data it never saw).</td></tr>
+            <tr><td><code>colsample_bytree</code></td><td>0.8</td><td>Each tree only considers a random 80% of the FEATURE COLUMNS when choosing splits — same anti-overfitting idea as subsample, applied to features instead of rows, so no single tree can lean entirely on one feature.</td></tr>
+            <tr><td><code>objective="reg:squarederror"</code></td><td>—</td><td>The loss function being minimized: (prediction &minus; true_value)&sup2;, averaged across training rows. This is what makes the model a REGRESSOR (predicting a continuous severity index like 2.31) rather than a classifier — see the cell above this one for why that distinction is the entire point of this file.</td></tr>
+            <tr><td><code>early_stopping_rounds</code></td><td>20</td><td>Training stops early if 20 consecutive rounds pass with no improvement in validation MAE — prevents wasting the full 300-tree budget once the model has stopped genuinely improving, and keeps whichever iteration had the BEST validation score, not just the last one.</td></tr>
+            <tr><td><code>eval_metric="mae"</code></td><td>—</td><td>Mean Absolute Error is what's watched on the validation set to decide when to early-stop — chosen because it's on the same scale as this project's real target metric, Mean Absolute Tier Error (MATE), just computed on the continuous regression output instead of the binned discrete tiers.</td></tr>
+            <tr><td><code>sample_weight</code></td><td>from <code>compute_sample_weight("balanced", ...)</code></td><td>Per-row training weights (see the cell below) — rarer severity tiers get proportionally higher weight so the regressor can't just minimize loss by nailing the abundant Normal rows and ignoring HACE risk.</td></tr>
+          </table></div>
+          <div class="why-box"><b>What "Tuned thresholds: [0.85, 2.0, 2.85, 4.0]" means in practice:</b> these 4 numbers cut the continuous prediction line into 5 buckets: below 0.85 → Normal, 0.85 to 2.0 → Mild AMS, 2.0 to 2.85 → Severe AMS, 2.85 to 4.0 → HAPE risk, above 4.0 → HACE risk. Compare to naive rounding's thresholds of [0.5, 1.5, 2.5, 3.5] (evenly spaced) — the tuned thresholds are NOT evenly spaced (0.85→2.0 is a 1.15-wide bucket, 2.0→2.85 is only 0.85 wide), reflecting that the model's raw predictions for different tiers aren't symmetric around their naive centers.</div>
         </div>
 
         <div class="nb-cell">
@@ -1377,6 +1473,7 @@ spo2_trend_5min         0.0440
 hr                      0.0402
 hr_trend_5min           0.0159</div>
           <div class="why-box">If raw <code>hr</code> had dominated over <code>spo2_delta</code>, that would be a red flag the model learned something spurious. Instead the top two features exactly match <code>docs/lls_mapping.md</code>'s clinical reasoning.</div>
+          <div class="why-box"><b>What "feature importance" actually measures here:</b> XGBoost's default importance metric (<code>model.feature_importances_</code>) is "gain" — how much each feature's splits, on average across all 300 trees, reduced the squared-error loss when used. A value of 0.3428 for <code>spo2_delta</code> means roughly 34% of all the loss-reduction achieved by every split in every tree can be attributed to splits on that one feature — it's the feature the ensemble leans on hardest to separate tiers. These 9 values sum to 1.0 (they're a relative share, not an absolute unit), so <code>spo2_delta</code> (0.3428) + <code>time_at_altitude_min</code> (0.2113) alone already account for &gt;55% of the model's total decision-making — the other 7 features combined explain less than half.</div>
         </div>
       </article>
     </section>
@@ -1435,11 +1532,29 @@ print(f"Total trainable parameters: {n_params:,}")</code></pre>
 )
 Total trainable parameters: 30,917  (deliberately small)</div>
           <div class="why-box">Deliberately small — 2 layers, 48 hidden units — per the project's instruction to keep this a comparison, not a bid for maximum performance. Classifies directly into 5 classes with cross-entropy, a genuinely different ordinal-handling strategy than XGBoost's regression.</div>
+          <div class="table-wrap"><table>
+            <tr><th>Parameter</th><th>Value</th><th>What it controls</th></tr>
+            <tr><td><code>input_size</code></td><td>4</td><td>Number of raw features fed in per timestep (spo2, hr, temp, altitude) — one value per feature, per second, for 60 seconds.</td></tr>
+            <tr><td><code>hidden_size</code></td><td>48</td><td>The size of the LSTM's internal memory vector — at every timestep, the cell updates a 48-number "summary of everything relevant seen so far" and passes it to the next timestep. Larger means more capacity to remember complex patterns, but also more parameters to overfit with — 48 is small on purpose (typical LSTMs for serious sequence tasks use hundreds).</td></tr>
+            <tr><td><code>num_layers</code></td><td>2</td><td>Two LSTM layers stacked — the first layer's hidden-state OUTPUT at every timestep becomes the second layer's INPUT at that timestep, letting the second layer learn patterns over the first layer's already-processed representation rather than raw vitals directly.</td></tr>
+            <tr><td><code>dropout</code></td><td>0.2 (between LSTM layers), 0.2 (in the head)</td><td>During training only, 20% of connections are randomly zeroed out on each forward pass — forces the network to not over-rely on any single pathway, a standard overfitting guard. Automatically disabled at inference (<code>model.eval()</code>).</td></tr>
+            <tr><td><code>head</code> (Linear→ReLU→Dropout→Linear)</td><td>48→32→5</td><td>After the LSTM produces its final 48-number summary, this small feedforward network maps it down to 32 numbers, applies ReLU (zeroes out negative values — the standard nonlinearity that lets the network learn non-linear patterns at all), drops 20% for regularization, then maps to exactly 5 numbers — one raw score ("logit") per severity tier.</td></tr>
+            <tr><td>30,917 total parameters</td><td>—</td><td>Every learnable weight/bias across both LSTM layers and the head, combined. For scale: XGBoost's 300 trees at depth 5 have roughly comparable effective complexity, but a modern large language model has parameters in the billions — this LSTM is intentionally tiny, sized to this project's dataset, not a serious attempt at a large sequence model.</td></tr>
+          </table></div>
         </div>
 
         <div class="nb-cell">
           <div class="nb-cell-head"><span class="nb-tag code">code</span><span class="nb-title">Training with early stopping, real run</span></div>
 <pre><code>trained_model, mean, std = lstm_model.train(train_df, val_df)</code></pre>
+          <div class="table-wrap"><table>
+            <tr><th>train() parameter</th><th>Value</th><th>What it controls</th></tr>
+            <tr><td><code>epochs</code></td><td>12</td><td>Maximum number of full passes over the entire training set — one epoch means every training window has been shown to the model once.</td></tr>
+            <tr><td><code>batch_size</code></td><td>256</td><td>How many windows are processed together in one forward/backward pass before the model's weights are updated — a compromise between GPU/CPU efficiency (larger batches use hardware better) and update frequency (smaller batches update weights more often per epoch).</td></tr>
+            <tr><td><code>lr</code> (learning rate)</td><td>0.001 (1e-3)</td><td>How large a step the Adam optimizer takes when adjusting weights after each batch, in the direction that reduces loss. Too high risks overshooting a good solution; too low trains too slowly. 0.001 is a common, safe default for Adam.</td></tr>
+            <tr><td><code>criterion</code> (loss function)</td><td><code>CrossEntropyLoss(weight=class_weights)</code></td><td>Cross-entropy measures how far the model's predicted probability distribution over the 5 tiers is from the true tier (one-hot) — penalizing confident wrong answers heavily. The <code>weight</code> argument multiplies each class's contribution by its class weight (same "balanced" logic as XGBoost's sample_weight — see notebook 08), so a wrong prediction on a rare HACE-risk window costs more than an equally-wrong prediction on an abundant Normal window.</td></tr>
+            <tr><td><code>optimizer</code></td><td>Adam</td><td>The algorithm that actually updates the network's 30,917 weights each step, using the loss's gradient. Adam adapts its effective step size per-parameter based on recent gradient history — generally more forgiving of an imperfect learning-rate choice than plain gradient descent.</td></tr>
+            <tr><td><code>patience</code></td><td>3</td><td>Early stopping tolerance — training stops if validation loss fails to improve for 3 consecutive epochs, restoring the BEST-seen checkpoint rather than the final one.</td></tr>
+          </table></div>
           <div class="output-box"><span class="lbl">Output</span>epoch  1/12  train_loss=1.4043  val_loss=1.1932
 epoch  2/12  train_loss=1.3211  val_loss=1.1178
 epoch  3/12  train_loss=1.2796  val_loss=1.1150
@@ -1447,7 +1562,7 @@ epoch  4/12  train_loss=1.2536  val_loss=1.1906
 epoch  5/12  train_loss=1.2093  val_loss=1.1683
 epoch  6/12  train_loss=1.1803  val_loss=1.2031
 early stopping at epoch 6 (no val improvement for 3 epochs)</div>
-          <div class="why-box">Val loss best at epoch 3 (1.1150) — the checkpoint restored after early stopping is that one, not epoch 6's (already beginning to overfit).</div>
+          <div class="why-box">Val loss best at epoch 3 (1.1150) — the checkpoint restored after early stopping is that one, not epoch 6's (already beginning to overfit). Reading the two curves together: <code>train_loss</code> falls steadily every single epoch (1.4043 → 1.1803, the model is continuously getting better at fitting the TRAINING data it can see). <code>val_loss</code> instead falls for 3 epochs (1.1932 → 1.1178 → 1.1150) then starts RISING again (1.1906, 1.1683, 1.2031) — this divergence, train loss still improving while val loss worsens, is the textbook signature of overfitting: the model is starting to memorize training-specific noise rather than learning patterns that generalize. <code>patience=3</code> catches this 3 epochs after the peak (epoch 6, since the best was epoch 3) and rolls back to the epoch-3 weights rather than shipping the overfit epoch-6 model.</div>
         </div>
 
         <div class="nb-cell">
@@ -1459,11 +1574,13 @@ Recall (macro):       0.3695
 F1 (macro):            0.3742
 Mean Abs Tier Error:   0.7849
 Under-triage rate:     0.2345</div>
+          <div class="why-box">The LSTM's precision (0.4049) is actually slightly HIGHER than XGBoost's (0.3873, notebook 08) — when the LSTM commits to a tier, it's marginally more often correct. But its MATE (0.7849) is meaningfully WORSE than XGBoost's (0.5942) — when the LSTM IS wrong, it tends to be wrong by MORE tiers. Put together: the LSTM is a bit pickier/more precise but makes bigger mistakes when it does err, which is exactly the ordinal-awareness gap the next cell explains.</div>
         </div>
 
         <div class="nb-cell">
           <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">What the comparison actually showed</span></div>
           <p class="nb-md">F1 essentially tied with XGBoost (~0.37 both), but MATE notably worse (0.78 vs 0.59). Evaluated with the exact same <code>metrics.py</code> on the exact same test set, that gap is informative: XGBoost's structural approach to ordinality (regression target, tier distance baked into the loss) genuinely helped more than the LSTM's ability to learn temporal patterns directly from raw sequences compensated for.</p>
+          <p class="nb-md"><b>Why this specific gap, mechanically:</b> XGBoost's loss function (squared error on a continuous severity index) mathematically KNOWS that predicting 3.9 for a true 4 is a tiny mistake and predicting 0.2 is a huge one — tier distance is baked directly into what the model is optimizing. The LSTM's cross-entropy loss treats all 5 classes as equally-distant categories — to its loss function, "predicted Normal, true HACE risk" and "predicted Mild AMS, true Severe AMS" are EQUALLY wrong, the exact same blind spot the rule baseline's plain accuracy has (see notebook 06's config.py cell on ordinal vs. multi-class). The LSTM never sees a training signal telling it "tier 4 is closer to tier 3 than to tier 0" — it has to infer any ordinal structure indirectly, from correlations in the data, rather than having it as a structural guarantee the way XGBoost's regression setup does.</p>
         </div>
       </article>
     </section>
@@ -1494,6 +1611,7 @@ LSTM produces 23,205 windowed predictions -- a DIFFERENT count, and that's expec
           <div class="output-box"><span class="lbl">Output</span>Rule-Based Baseline    MATE=0.8189  under_triage=0.3088
 XGBoost Ordinal        MATE=0.5942  under_triage=0.2208
 LSTM                   MATE=0.7849  under_triage=0.2345</div>
+          <div class="why-box"><b>The exact selection algorithm:</b> <code>run_comparison()</code> evaluates all THREE models on the identical held-out test set (same rows, same <code>evaluate()</code> function from notebook 07), then runs <code>winner = min(candidates, key=lambda r: r["mean_abs_tier_error"])</code> — a plain Python <code>min()</code> over a list, picking whichever model's result dict has the smallest MATE value. <code>candidates</code> deliberately EXCLUDES the rule-based baseline from this <code>min()</code> call (it's filtered out before the comparison), so even if the baseline happened to have the lowest MATE on some run, it could never be auto-selected as the production model — it exists purely to check the real models, never to compete as one. Ranking by MATE here: Baseline 0.8189 &gt; LSTM 0.7849 &gt; XGBoost 0.5942 — XGBoost wins by the largest margin (0.19 lower than its nearest competitor), which is why it's selected.</div>
         </div>
 
         <div class="nb-cell">
@@ -1511,6 +1629,12 @@ LSTM                   MATE=0.7849  under_triage=0.2345</div>
         <div class="nb-cell">
           <div class="nb-cell-head"><span class="nb-tag md">markdown</span><span class="nb-title">Confidence: an honest, not over-claimed, proxy</span></div>
           <p class="nb-md"><b>XGBoost branch:</b> measures how close the raw continuous prediction sits to the center of its bin vs. an edge — explicitly <em>not</em> a calibrated probability. <b>LSTM branch:</b> <code>torch.softmax(logits)</code> genuinely is a probability, since the LSTM is a real classifier with a softmax head. When this reaches the LLM prompt or dashboard, it should be presented honestly, not implying more precision than the underlying number has.</p>
+<pre><code>edges = [0.0] + list(thresholds) + [4.0]        # e.g. [0.0, 0.85, 2.0, 2.85, 4.0, 4.0]
+lo, hi = edges[tier_index], edges[tier_index + 1]  # this prediction's bin boundaries
+span = max(hi - lo, 1e-6)
+center = (lo + hi) / 2
+confidence = 1.0 - min(abs(continuous - center) / (span / 2), 1.0) * 0.5</code></pre>
+          <p class="nb-md"><b>Worked example</b> for the row below (continuous prediction ~1.83, tier_index=2/Severe AMS, thresholds=[0.85, 2.0, 2.85, 4.0]): this tier's bin runs from 0.85 to 2.0, so <code>span=1.15</code> and <code>center=1.425</code>. Distance from center: |1.83 &minus; 1.425| = 0.405. Normalized: 0.405 / (1.15/2) = 0.405/0.575 &asymp; 0.70. Confidence: 1.0 &minus; min(0.70, 1.0) &times; 0.5 = 1.0 &minus; 0.35 = <b>0.65</b>. The formula is deliberately bounded between 0.5 (prediction sits right on a bin edge — least certain, but the model still "chose" this tier over its neighbor, so never drops below 0.5) and 1.0 (prediction sits exactly at the bin's center — most certain). It is NOT a calibrated probability like the LSTM's softmax output — it's a "how borderline is this" heuristic, honestly labeled as such rather than presented with false precision.</p>
         </div>
 
         <div class="nb-cell">
@@ -1522,6 +1646,7 @@ True severity at the end of this buffer: Severe AMS
 
 predict_severity() output:
 {'severity_index': 2, 'severity_label': 'Severe AMS', 'confidence': 0.827, 'model_used': 'XGBoost Ordinal'}</div>
+          <div class="why-box">This is <code>predict_severity()</code>'s complete, real return contract — 4 keys, always: <code>severity_index</code> (0-4, the raw integer), <code>severity_label</code> (the human-readable string, looked up from <code>SEVERITY_TIERS[severity_index]</code>), <code>confidence</code> (the bin-position proxy explained above — 0.827 here means the model's continuous prediction landed close to the CENTER of the Severe AMS bin, well away from either edge), and <code>model_used</code> (whichever model <code>selected_model.json</code> currently points to — always "XGBoost Ordinal" unless the saved selection is manually changed to LSTM). Crucially: <code>severity_index=2</code> matches the buffer's true end-of-trajectory label ("Severe AMS") exactly — a correct prediction on a real, held-out test-set subject, not a cherry-picked toy example.</div>
         </div>
 
         <div class="nb-cell">
