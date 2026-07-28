@@ -1,9 +1,15 @@
 import sys
 from pathlib import Path
 
+# Make build_notebook.py importable regardless of the cwd this script is run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebook import make_notebook
 
+# Static, in-order (cell_type, source) list defining every cell of
+# notebooks/09_lstm_model_walkthrough.ipynb -- walks through the LSTM's raw
+# (not hand-engineered) inputs, strided windowing, train-only normalization,
+# the SeverityLSTM architecture, class-weighted cross-entropy, and how its
+# test-set MATE compared unfavorably to XGBoost's.
 cells = [
     ("markdown", """# 09 — `src/models/lstm_model.py`: The Deep Learning Comparison Model
 
@@ -192,4 +198,5 @@ The LSTM takes a genuinely different approach from XGBoost: raw 60-second window
 **Next notebook:** `10_predict_severity.ipynb` — how the three models get compared side by side, and how the winner becomes the single `predict_severity()` function the rest of the system calls."""),
 ]
 
+# Render the cell list above into a real .ipynb file at this fixed path.
 make_notebook(cells, "c:/Users/shaur/Desktop/My codes shaurya/Medical Alert System/notebooks/09_lstm_model_walkthrough.ipynb")

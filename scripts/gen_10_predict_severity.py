@@ -1,9 +1,16 @@
 import sys
 from pathlib import Path
 
+# Make build_notebook.py importable regardless of the cwd this script is run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebook import make_notebook
 
+# Static, in-order (cell_type, source) list defining every cell of
+# notebooks/10_predict_severity_walkthrough.ipynb -- walks through
+# run_comparison()'s model selection (by mean_abs_tier_error, baseline
+# excluded), the row-vs-window prediction-count subtlety between XGBoost
+# and the LSTM, and predict_severity()'s single stable entry point +
+# per-model confidence proxies.
 cells = [
     ("markdown", """# 10 — `src/models/predict_severity.py`: Selecting the Winner + Live Inference
 
@@ -175,4 +182,5 @@ Reading this notebook alongside the previous six tells the whole Week 1 story:
 That function — `predict_severity()` — is what the rest of the project (Days 8-14: demo data source, LLM interpretation, Telegram alerts, the Streamlit dashboard) will build on top of, without ever needing to know it's XGBoost underneath."""),
 ]
 
+# Render the cell list above into a real .ipynb file at this fixed path.
 make_notebook(cells, "c:/Users/shaur/Desktop/My codes shaurya/Medical Alert System/notebooks/10_predict_severity_walkthrough.ipynb")

@@ -68,24 +68,24 @@ def _log_alert(message: str, sent: bool, error: str | None = None) -> None:
     """Append one JSON line per alert attempt -- sent or not -- to the local log."""
     import json
 
-    ALERT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ALERT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)  # create data/processed/ on first alert if it doesn't exist yet
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "sent": sent,
         "message": message,
         "error": error,
     }
-    with open(ALERT_LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record) + "\n")
+    with open(ALERT_LOG_PATH, "a", encoding="utf-8") as f:  # append, never overwrite -- this is a permanent running log
+        f.write(json.dumps(record) + "\n")  # one JSON object per line (JSONL), so the log can be read back line-by-line without parsing a giant array
 
 
 async def _send_async(message: str) -> None:
     from telegram import Bot
 
-    token = os.environ["TELEGRAM_BOT_TOKEN"]
+    token = os.environ["TELEGRAM_BOT_TOKEN"]  # raises KeyError if missing -- callers must check is_telegram_configured()/presence first, see send_alert()
     chat_id = os.environ["TELEGRAM_CHAT_ID"]
     bot = Bot(token=token)
-    await bot.send_message(chat_id=chat_id, text=message)
+    await bot.send_message(chat_id=chat_id, text=message)  # plain text send -- no parse_mode, see format_alert_message()'s docstring for why
 
 
 def send_alert(
@@ -119,10 +119,10 @@ def send_alert(
         }
 
     try:
-        asyncio.run(_send_async(message))
+        asyncio.run(_send_async(message))  # runs the async Telegram call to completion synchronously, see docstring above
         _log_alert(message, sent=True)
         return {"sent": True, "message": message, "error": None}
-    except Exception as exc:
+    except Exception as exc:  # any Telegram/network failure -- log it and report failure, never raise out of this function
         _log_alert(message, sent=False, error=str(exc))
         return {"sent": False, "message": message, "error": str(exc)}
 

@@ -63,26 +63,29 @@ class ScenarioDataSource(DataSource):
         self.reset()
 
     def _generate(self) -> None:
-        rng = np.random.default_rng(self._seed)
+        rng = np.random.default_rng(self._seed)  # seeded RNG -> the SAME trajectory every time this exact seed is used
         df = simulate_trajectory(
-            subject_id=f"demo_{self.scenario_name.replace(' ', '_')}",
+            subject_id=f"demo_{self.scenario_name.replace(' ', '_')}",  # readable, collision-free id for logging/debugging only
             tier=self._tier,
             duration_minutes=self._duration_minutes,
             rng=rng,
         )
+        # Keep only the columns the Reading TypedDict contract requires, dropped
+        # in the same order every DataSource emits them; orient="records" gives
+        # a list of {col: value} dicts, i.e. one dict per reading/row.
         self._trajectory = df[["timestamp", "spo2", "hr", "temp", "altitude"]].to_dict(
             orient="records"
         )
 
     def next_reading(self) -> Reading | None:
-        if self._index >= len(self._trajectory):
+        if self._index >= len(self._trajectory):  # trajectory exhausted -- signal end per the DataSource contract
             return None
         reading = self._trajectory[self._index]
-        self._index += 1
+        self._index += 1  # advance the simulated clock by one tick
         return reading
 
     def reset(self) -> None:
-        if self._trajectory is None:
+        if self._trajectory is None:  # only generate once per instance -- reset() rewinds, it doesn't regenerate
             self._generate()
         self._index = 0
 

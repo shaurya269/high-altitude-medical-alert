@@ -1,9 +1,14 @@
 import sys
 from pathlib import Path
 
+# Make build_notebook.py importable regardless of the cwd this script is run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebook import make_notebook
 
+# Static, in-order (cell_type, source) list defining every cell of
+# notebooks/02_config_walkthrough.ipynb -- walks through src/config.py's
+# paths, severity tiers, clinical ranges, feature windows, hysteresis
+# settings, and train/val/test split constants, section by section.
 cells = [
     ("markdown", """# 02 — `src/config.py`: The Single Source of Truth
 
@@ -136,4 +141,5 @@ print("Random seed:", config.RANDOM_SEED)"""),
 **Next notebook:** `03_synth_data.ipynb` — how the synthetic vitals dataset is actually generated, tier by tier."""),
 ]
 
+# Render the cell list above into a real .ipynb file at this fixed path.
 make_notebook(cells, "c:/Users/shaur/Desktop/My codes shaurya/Medical Alert System/notebooks/02_config_walkthrough.ipynb")

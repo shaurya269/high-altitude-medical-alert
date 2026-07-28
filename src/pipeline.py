@@ -100,7 +100,7 @@ class MedicalAlertPipeline:
                 exhausted=True,
             )
 
-        accepted = self.buffer.add(reading)
+        accepted = self.buffer.add(reading)  # Stage 2: rolling buffer; False = reading was out-of-range and rejected, not stored
 
         if len(self.buffer) < self.min_readings_for_classification:
             return TickResult(

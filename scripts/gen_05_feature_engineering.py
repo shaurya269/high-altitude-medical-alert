@@ -1,9 +1,14 @@
 import sys
 from pathlib import Path
 
+# Make build_notebook.py importable regardless of the cwd this script is run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebook import make_notebook
 
+# Static, in-order (cell_type, source) list defining every cell of
+# notebooks/05_feature_engineering_walkthrough.ipynb -- walks through the
+# five engineered features, the rolling().apply() -> vectorized shift()
+# performance fix, and the temporal_split() per-tier stratification bug/fix.
 cells = [
     ("markdown", """# 05 — `src/data/feature_engineering.py`: Trend Features + the Temporal Split
 
@@ -180,4 +185,5 @@ One more detail worth calling out: even the *fixed* split still operates on whol
 **Next notebook:** `06_rule_baseline.ipynb` — the first model: simple if/else thresholds, and why it has to exist before any ML model is trusted."""),
 ]
 
+# Render the cell list above into a real .ipynb file at this fixed path.
 make_notebook(cells, "c:/Users/shaur/Desktop/My codes shaurya/Medical Alert System/notebooks/05_feature_engineering_walkthrough.ipynb")

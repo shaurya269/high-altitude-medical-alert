@@ -66,14 +66,14 @@ def evaluate(y_true: np.ndarray, y_pred: np.ndarray, model_name: str = "model") 
     # than letting it hide inside an aggregate accuracy number.
     under_triage_rate = float(np.mean(y_pred < y_true))
 
-    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(SEVERITY_TIERS))))
+    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(SEVERITY_TIERS))))  # labels= pins the row/col order to all 5 tiers even if a rare class is absent from this particular y_true/y_pred batch
     report = classification_report(
         y_true,
         y_pred,
-        labels=list(range(len(SEVERITY_TIERS))),
-        target_names=SEVERITY_TIERS,
-        zero_division=0,
-        output_dict=True,
+        labels=list(range(len(SEVERITY_TIERS))),  # same reasoning as confusion_matrix's labels= above -- keeps per-class rows present/aligned even for an unseen-in-this-batch tier
+        target_names=SEVERITY_TIERS,  # display tier names instead of raw integer indices in the report
+        zero_division=0,  # a class with zero predicted/true samples would otherwise raise a warning and return NaN for precision/recall -- report 0 instead
+        output_dict=True,  # return a dict (not a printed string) so callers/print_report can format it themselves
     )
 
     return {

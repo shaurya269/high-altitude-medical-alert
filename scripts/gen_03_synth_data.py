@@ -1,9 +1,14 @@
 import sys
 from pathlib import Path
 
+# Make build_notebook.py importable regardless of the cwd this script is run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebook import make_notebook
 
+# Static, in-order (cell_type, source) list defining every cell of
+# notebooks/03_synth_data_walkthrough.ipynb -- walks through src/data/synth_data.py's
+# expected_spo2() reference curve, tier profiles, class imbalance, the smooth
+# onset ramp, and full trajectory/population generation, with plots at each step.
 cells = [
     ("markdown", """# 03 — `src/data/synth_data.py`: Generating the Synthetic Dataset
 
@@ -171,4 +176,5 @@ print(small_dataset["severity_label"].value_counts(normalize=True).round(3))""")
 **Next notebook:** `04_harespod_loader.ipynb` — the adapter waiting for the real dataset."""),
 ]
 
+# Render the cell list above into a real .ipynb file at this fixed path.
 make_notebook(cells, "c:/Users/shaur/Desktop/My codes shaurya/Medical Alert System/notebooks/03_synth_data_walkthrough.ipynb")

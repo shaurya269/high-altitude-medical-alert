@@ -178,15 +178,18 @@ def build_processed_dataset(raw: pd.DataFrame) -> pd.DataFrame:
     # the output, so re-attach it per-group inside the lambda rather than
     # relying on the now-removed include_groups=True behavior.
     def _process_group(group: pd.DataFrame) -> pd.DataFrame:
-        subject_id = group.name
+        subject_id = group.name  # pandas sets .name to the current group's key value (the subject_id) inside a groupby callback
         result = engineer_features(group)
         result["subject_id"] = subject_id
         return result
 
+    # group_keys=False: don't add an extra subject_id index level on top of
+    # each group's own row index (we're re-attaching subject_id as a plain
+    # column ourselves inside _process_group instead).
     processed = raw.groupby("subject_id", group_keys=False).apply(
         _process_group, include_groups=False
     )
-    processed["severity_index"] = processed["severity_label"].map(SEVERITY_INDEX)
+    processed["severity_index"] = processed["severity_label"].map(SEVERITY_INDEX)  # string tier name -> its ordinal int (e.g. "Severe AMS" -> 2), via the config dict
     return processed.reset_index(drop=True)
 
 

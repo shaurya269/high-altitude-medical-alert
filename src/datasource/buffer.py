@@ -37,6 +37,9 @@ VALID_RANGES = {
     "altitude": (-500.0, 9000.0),  # Dead Sea to just below Everest's summit
 }
 
+# minutes -> seconds -> sample count, e.g. 10 min * 60 * 1 Hz = 600 readings
+# held at once -- this is what makes the buffer "rolling ROLLING_BUFFER_MINUTES"
+# regardless of the configured sample rate, rather than a fixed reading count.
 BUFFER_MAXLEN = ROLLING_BUFFER_MINUTES * 60 * SAMPLE_RATE_HZ
 
 
@@ -49,8 +52,8 @@ class ReadingBuffer:
     """
 
     def __init__(self, maxlen: int = BUFFER_MAXLEN):
-        self._readings: deque[Reading] = deque(maxlen=maxlen)
-        self.rejected_count = 0
+        self._readings: deque[Reading] = deque(maxlen=maxlen)  # deque(maxlen=...) enforces the rolling-window eviction automatically
+        self.rejected_count = 0  # count of readings dropped by add() -- surfaced to the UI, not raised as an error
 
     def add(self, reading: Reading) -> bool:
         """

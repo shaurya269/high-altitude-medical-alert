@@ -173,7 +173,7 @@ def train(
     learning_rate: float = 0.05,
 ) -> tuple[xgb.XGBRegressor, list[float]]:
     X_train = train_df[FEATURE_COLUMNS]
-    y_train = train_df["severity_index"].astype(float)
+    y_train = train_df["severity_index"].astype(float)  # cast int tier labels to float -- this is the continuous regression target, per the module docstring
     X_val = val_df[FEATURE_COLUMNS]
     y_val = val_df["severity_index"].astype(float)
 
@@ -186,22 +186,22 @@ def train(
     sample_weight = compute_sample_weight("balanced", y_train.round().astype(int))
 
     model = xgb.XGBRegressor(
-        n_estimators=n_estimators,
-        max_depth=max_depth,
-        learning_rate=learning_rate,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        objective="reg:squarederror",
-        random_state=RANDOM_SEED,
-        early_stopping_rounds=20,
-        eval_metric="mae",
+        n_estimators=n_estimators,  # max number of boosting trees to build (300 default); early_stopping_rounds below can halt before reaching this
+        max_depth=max_depth,  # max depth per tree (5 default) -- caps how many feature interactions one tree can encode, guards against overfitting a modestly-sized dataset
+        learning_rate=learning_rate,  # shrinkage applied to each tree's contribution (0.05 default) -- smaller values need more trees but generalize better
+        subsample=0.8,  # fraction of TRAINING ROWS sampled (without replacement) per tree -- adds randomness across trees to reduce overfitting/variance
+        colsample_bytree=0.8,  # fraction of FEATURE COLUMNS sampled per tree -- same variance-reduction idea as subsample, applied to columns instead of rows
+        objective="reg:squarederror",  # regression objective (minimize squared error) -- this is what makes the model predict a continuous severity score instead of a class, per the module docstring
+        random_state=RANDOM_SEED,  # fixes the row/column subsampling randomness so training is reproducible
+        early_stopping_rounds=20,  # stop boosting if val eval_metric hasn't improved for 20 rounds -- prevents overfitting past the point val performance plateaus
+        eval_metric="mae",  # metric early stopping/eval_set actually watches (mean absolute error on the continuous score, not the binned tiers)
     )
     model.fit(
         X_train,
         y_train,
-        sample_weight=sample_weight,
-        eval_set=[(X_val, y_val)],
-        verbose=False,
+        sample_weight=sample_weight,  # per-row weights from compute_sample_weight above, so rare severity classes count more toward the loss
+        eval_set=[(X_val, y_val)],  # validation fold XGBoost checks each round against, purely to drive early_stopping_rounds -- never used to fit weights
+        verbose=False,  # suppress XGBoost's per-round eval printout; we print our own summary after training instead
     )
 
     val_continuous_preds = model.predict(X_val)  # continuous severity scores (e.g. 2.3), not yet binned to a discrete tier

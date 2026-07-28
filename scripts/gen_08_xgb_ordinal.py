@@ -1,9 +1,14 @@
 import sys
 from pathlib import Path
 
+# Make build_notebook.py importable regardless of the cwd this script is run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebook import make_notebook
 
+# Static, in-order (cell_type, source) list defining every cell of
+# notebooks/08_xgb_ordinal_walkthrough.ipynb -- explains the regression +
+# tuned-threshold-binning trick that makes plain XGBoost ordinal-aware,
+# balanced sample weighting, and the coordinate-descent threshold search.
 cells = [
     ("markdown", """# 08 — `src/models/xgb_ordinal.py`: The Primary Model
 
@@ -219,4 +224,5 @@ The core trick: train XGBoost as a **regressor** on the severity index (so the l
 **Next notebook:** `09_lstm_model.ipynb` — the deep-learning comparison model, and why it took a different (classification, not regression) approach to the same ordinal problem."""),
 ]
 
+# Render the cell list above into a real .ipynb file at this fixed path.
 make_notebook(cells, "c:/Users/shaur/Desktop/My codes shaurya/Medical Alert System/notebooks/08_xgb_ordinal_walkthrough.ipynb")

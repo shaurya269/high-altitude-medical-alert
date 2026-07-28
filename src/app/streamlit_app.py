@@ -290,7 +290,7 @@ def _do_tick() -> None:
     result = pipeline.tick()
     st.session_state.last_result = result
     if result.exhausted:
-        st.session_state.auto_play = False
+        st.session_state.auto_play = False  # stop the auto-play rerun loop -- otherwise main() would keep calling tick() forever against a source with nothing left to give
         return
     if result.reading is not None:
         row = dict(result.reading)
@@ -385,7 +385,7 @@ def render_severity_readout() -> None:
     color = SEVERITY_COLORS.get(severity["severity_label"], "#8FA3B8")
     trend_arrow, trend_label = _severity_trend()
 
-    col1, col2, col3 = st.columns([2, 1, 2])
+    col1, col2, col3 = st.columns([2, 1, 2])  # relative width ratios, not pixel counts -- gate-status column is narrower since it's just two short stats
     with col1:
         st.markdown(
             f"<div style='padding:16px;border-left:6px solid {color};background:rgba(128,128,128,0.08);"
@@ -397,7 +397,7 @@ def render_severity_readout() -> None:
             unsafe_allow_html=True,
         )
     with col2:
-        gate = st.session_state.pipeline.gate
+        gate = st.session_state.pipeline.gate  # read live HysteresisGate state directly, not result.severity -- streak/cooldown live on the gate object, not in the TickResult
         cooldown = gate.seconds_since_last_alert
         cooldown_text = f"{cooldown:.0f}s ago" if cooldown is not None else "never fired"
         st.markdown(_metric_card("Consecutive elevated readings", str(gate.consecutive_count)), unsafe_allow_html=True)
@@ -445,6 +445,9 @@ def render_live_plots() -> None:
     df = pd.DataFrame(history)
     col1, col2 = st.columns(2)
     with col1:
+        # set_index("timestamp") makes the timestamp the x-axis rather than a
+        # plotted column; the single-column [[...]] selection keeps each
+        # chart to one line instead of overlaying every numeric field.
         st.line_chart(df.set_index("timestamp")[["spo2"]], height=200)
         st.caption("SpO2 (%)")
     with col2:

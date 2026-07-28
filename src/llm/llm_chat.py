@@ -52,8 +52,8 @@ GROQ_MODEL = "openai/gpt-oss-120b"
 # below was raised to 600 as part of this same switch, not tuned
 # independently.
 
-_client = None
-_client_checked = False
+_client = None          # module-level cache of the constructed Groq client (or None if unconfigured)
+_client_checked = False  # whether _get_client() has already resolved GROQ_API_KEY once this process
 
 
 def _get_client():
@@ -65,7 +65,7 @@ def _get_client():
     which every calling function treats as "use the fallback path."
     """
     global _client, _client_checked
-    if _client_checked:
+    if _client_checked:  # already resolved once this process -- skip re-checking the env var/re-constructing the client every call
         return _client
     _client_checked = True
 
@@ -73,7 +73,7 @@ def _get_client():
     if not api_key:
         return None
 
-    import groq
+    import groq  # imported lazily here too, so the package isn't required just to import this module
 
     _client = groq.Groq(api_key=api_key)
     return _client
@@ -160,6 +160,12 @@ def explain_severity(severity_label: str, confidence: float, readings: dict) -> 
     ]
     try:
         response = client.chat.completions.create(
+            # temperature=0.4: fairly low but not deterministic -- explanations
+            # should read naturally across calls without paraphrasing the
+            # severity/vitals facts differently each time.
+            # max_tokens=600: covers gpt-oss-120b's variable reasoning-token
+            # overhead (see GROQ_MODEL comment above) plus the requested
+            # 2-4 sentence visible output, without truncating mid-sentence.
             model=GROQ_MODEL, messages=messages, temperature=0.4, max_tokens=600
         )
         return response.choices[0].message.content
@@ -192,13 +198,19 @@ def chat(
 
     context = _severity_context(severity_label, confidence, readings)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages.append({"role": "system", "content": context})
+    messages.append({"role": "system", "content": context})  # re-injected every call, per the docstring above, so long chats can't drift from the ground truth
     if history:
-        messages.extend(history)
+        messages.extend(history)  # prior turns inserted AFTER the fresh ground-truth context, so they can't shadow it
     messages.append({"role": "user", "content": user_message})
 
     try:
         response = client.chat.completions.create(
+            # temperature=0.5: slightly higher than explain_severity's 0.4 --
+            # this is free-form conversational Q&A, so a bit more variation in
+            # phrasing is fine and even desirable across turns.
+            # max_tokens=600: same reasoning-token headroom as explain_severity
+            # (see GROQ_MODEL comment above) so multi-turn chat replies don't
+            # get cut off mid-sentence either.
             model=GROQ_MODEL, messages=messages, temperature=0.5, max_tokens=600
         )
         return response.choices[0].message.content
@@ -265,9 +277,15 @@ def generate_alert_content(severity_label: str, confidence: float, readings: dic
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=messages,
+            # temperature=0.2: lowest of the three calls -- this output is
+            # parsed as structured JSON for a real alert, so consistency and
+            # predictable phrasing matter more than conversational variety here.
             temperature=0.2,
+            # max_tokens=600: same reasoning-token headroom as the other two
+            # calls (see GROQ_MODEL comment above); a truncated response here
+            # would fail json.loads() below, not just read awkwardly.
             max_tokens=600,
-            response_format={"type": "json_object"},
+            response_format={"type": "json_object"},  # forces Groq to return valid JSON text, not prose wrapping a JSON blob
         )
         content = json.loads(response.choices[0].message.content)
         if not ALERT_JSON_KEYS <= set(content.keys()):  # set <= set is "is subset of" -- checks every required key is present, extra keys are fine

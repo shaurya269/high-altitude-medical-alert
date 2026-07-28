@@ -123,19 +123,26 @@ class SeverityLSTM(nn.Module):
     """
 
     def __init__(self, n_features: int, hidden_size: int = 48, n_layers: int = 2):
+        # hidden_size=48: width of the LSTM's internal hidden/cell state --
+        # controls how much temporal information it can carry forward;
+        # deliberately small (see class docstring) since this is a
+        # comparison model, not a bid for max performance.
+        # n_layers=2: stacked LSTM layers (each layer's hidden sequence feeds
+        # the next) -- 2 is enough to let the model compose simple temporal
+        # patterns without the overfitting risk of going deeper.
         super().__init__()
         self.lstm = nn.LSTM(
-            input_size=n_features,
+            input_size=n_features,  # width of each timestep's input vector (len(LSTM_RAW_COLUMNS) == 4)
             hidden_size=hidden_size,
             num_layers=n_layers,
-            batch_first=True,
-            dropout=0.2 if n_layers > 1 else 0.0,
+            batch_first=True,  # expect input shaped (batch, seq_len, features) instead of PyTorch's default (seq_len, batch, features)
+            dropout=0.2 if n_layers > 1 else 0.0,  # dropout BETWEEN stacked LSTM layers, regularizing the inter-layer connections -- PyTorch ignores/warns if set with only 1 layer, hence the guard
         )
         self.head = nn.Sequential(
             nn.Linear(hidden_size, 32),
             nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(32, N_TIERS),
+            nn.Dropout(0.2),  # dropout in the classifier head -- separate regularization from the LSTM's own inter-layer dropout above
+            nn.Linear(32, N_TIERS),  # final layer outputs one raw logit per severity tier, consumed as class scores by CrossEntropyLoss
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -148,9 +155,9 @@ class SeverityLSTM(nn.Module):
 def train(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
-    epochs: int = 12,
-    batch_size: int = 256,
-    lr: float = 1e-3,
+    epochs: int = 12,  # max training passes over the full train set -- capped low since early stopping (patience below) usually cuts this short anyway
+    batch_size: int = 256,  # number of windows per gradient update -- large enough for stable gradients, small enough to fit comfortably in memory/CPU
+    lr: float = 1e-3,  # Adam's learning rate -- standard default step size for this optimizer, rarely needs tuning for a model this small
 ) -> tuple[SeverityLSTM, np.ndarray, np.ndarray]:
     torch.manual_seed(RANDOM_SEED)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -181,12 +188,12 @@ def train(
     class_weights = (class_counts.sum() / (N_TIERS * np.clip(class_counts, 1, None))).astype(
         np.float32
     )
-    criterion = nn.CrossEntropyLoss(weight=torch.from_numpy(class_weights).to(device))
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    criterion = nn.CrossEntropyLoss(weight=torch.from_numpy(class_weights).to(device))  # per-class weight scales each sample's loss contribution -- this is what makes rare tiers "count more" during backprop
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)  # Adam: adaptive per-parameter learning rates -- standard, low-maintenance choice for a small model like this over plain SGD
 
     best_val_loss = float("inf")
     best_state = None
-    patience, patience_counter = 3, 0
+    patience, patience_counter = 3, 0  # patience=3: stop training if val loss hasn't improved for 3 consecutive epochs (see the early-stopping check below)
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -198,7 +205,7 @@ def train(
             loss = criterion(logits, y_batch)
             loss.backward()
             optimizer.step()
-            train_loss += loss.item() * len(y_batch)
+            train_loss += loss.item() * len(y_batch)  # de-average the batch's mean loss back to a sum, weighted by batch size (last batch may be smaller) -- so dividing by len(train_ds) below gives a true per-sample average
         train_loss /= len(train_ds)
 
         model.eval()
@@ -208,7 +215,7 @@ def train(
                 X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                 logits = model(X_batch)
                 loss = criterion(logits, y_batch)
-                val_loss += loss.item() * len(y_batch)
+                val_loss += loss.item() * len(y_batch)  # same de-averaging as the train loop above
         val_loss /= len(val_ds)
 
         print(f"  epoch {epoch:2d}/{epochs}  train_loss={train_loss:.4f}  val_loss={val_loss:.4f}")
@@ -250,7 +257,7 @@ def save(model: SeverityLSTM, mean: np.ndarray, std: np.ndarray) -> None:
 
 
 def load() -> tuple[SeverityLSTM, np.ndarray, np.ndarray]:
-    checkpoint = torch.load(MODEL_PATH, weights_only=False)
+    checkpoint = torch.load(MODEL_PATH, weights_only=False)  # weights_only=False needed since the checkpoint bundles plain numpy arrays (mean/std) alongside the state_dict, not just tensor weights
     model = SeverityLSTM(n_features=len(checkpoint["raw_columns"]))
     model.load_state_dict(checkpoint["state_dict"])
     model.eval()
@@ -264,11 +271,11 @@ def predict(model: SeverityLSTM, mean: np.ndarray, std: np.ndarray, df: pd.DataF
     device = next(model.parameters()).device
     model.eval()
     preds = []
-    with torch.no_grad():
-        for i in range(0, len(X_norm), 512):
+    with torch.no_grad():  # inference only -- skip gradient tracking to save memory/time
+        for i in range(0, len(X_norm), 512):  # manual batching (fixed chunk size of 512) instead of a DataLoader -- avoids the loader's shuffling/worker overhead for a one-off prediction pass
             batch = torch.from_numpy(X_norm[i : i + 512]).float().to(device)
             logits = model(batch)
-            preds.append(logits.argmax(dim=1).cpu().numpy())
+            preds.append(logits.argmax(dim=1).cpu().numpy())  # argmax over class logits -> the predicted tier index; .cpu() first in case device is GPU
     return np.concatenate(preds), y_true
 
 

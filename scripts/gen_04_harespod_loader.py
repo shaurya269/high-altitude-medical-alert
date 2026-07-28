@@ -1,9 +1,15 @@
 import sys
 from pathlib import Path
 
+# Make build_notebook.py importable regardless of the cwd this script is run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebook import make_notebook
 
+# Static, in-order (cell_type, source) list defining every cell of
+# notebooks/04_harespod_loader_walkthrough.ipynb -- explains the real-data
+# adapter's contract before real data exists: has_harespod_data(), the
+# clear FileNotFoundError path, interpolate_altitude(), and the
+# stride-vs-average downsampling choice.
 cells = [
     ("markdown", """# 04 — `src/data/harespod_loader.py`: The Real-Data Adapter
 
@@ -116,4 +122,5 @@ This module is a contract, written ahead of the data it will eventually load: *w
 **Next notebook:** `05_feature_engineering.ipynb` — turning raw vitals (synthetic or, later, real) into the trend/delta features the models actually train on."""),
 ]
 
+# Render the cell list above into a real .ipynb file at this fixed path.
 make_notebook(cells, "c:/Users/shaur/Desktop/My codes shaurya/Medical Alert System/notebooks/04_harespod_loader_walkthrough.ipynb")

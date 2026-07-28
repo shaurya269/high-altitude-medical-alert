@@ -1,9 +1,14 @@
 import sys
 from pathlib import Path
 
+# Make build_notebook.py importable regardless of the cwd this script is run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebook import make_notebook
 
+# Static, in-order (cell_type, source) list defining every cell of
+# notebooks/06_rule_baseline_walkthrough.ipynb -- walks through the
+# hand-written if/else classify_row() decision cascade, predict()'s column
+# validation, and the baseline's real test-set confusion matrix.
 cells = [
     ("markdown", """# 06 — `src/models/rule_baseline.py`: The Sanity-Floor Baseline
 
@@ -130,4 +135,5 @@ The rule-based baseline exists as a floor to beat, not a model we intend to ship
 **Next notebook:** `07_metrics.ipynb` — the shared evaluation code every model (baseline, XGBoost, LSTM) is scored with identically."""),
 ]
 
+# Render the cell list above into a real .ipynb file at this fixed path.
 make_notebook(cells, "c:/Users/shaur/Desktop/My codes shaurya/Medical Alert System/notebooks/06_rule_baseline_walkthrough.ipynb")

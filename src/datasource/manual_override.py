@@ -71,7 +71,7 @@ class ManualDataSource(DataSource):
             "temp": self._temp,
             "altitude": self._altitude,
         }
-        self._timestamp += 1.0 / SAMPLE_RATE_HZ
+        self._timestamp += 1.0 / SAMPLE_RATE_HZ  # advance by one sample period (e.g. 1 second at 1 Hz) so trend windows see real elapsed time
         return reading
 
     def reset(self) -> None:

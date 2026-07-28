@@ -1,9 +1,14 @@
 import sys
 from pathlib import Path
 
+# Make build_notebook.py importable regardless of the cwd this script is run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebook import make_notebook
 
+# Static, in-order (cell_type, source) list defining every cell of
+# notebooks/07_metrics_walkthrough.ipynb -- explains why macro averaging,
+# Mean Absolute Tier Error, and under-triage rate were chosen as the shared
+# scoring code every model (baseline, XGBoost, LSTM) is evaluated with.
 cells = [
     ("markdown", """# 07 — `src/models/metrics.py`: Scoring Every Model the Same Way
 
@@ -154,4 +159,5 @@ Every model comparison you see elsewhere in this project traces back to these th
 **Next notebook:** `08_xgb_ordinal.ipynb` — the primary model, and how it turns regression + tuned thresholds into an ordinal-aware classifier."""),
 ]
 
+# Render the cell list above into a real .ipynb file at this fixed path.
 make_notebook(cells, "c:/Users/shaur/Desktop/My codes shaurya/Medical Alert System/notebooks/07_metrics_walkthrough.ipynb")

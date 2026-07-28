@@ -44,30 +44,30 @@ class HarespodReplayDataSource(DataSource):
         self.reset()
 
     def _load(self) -> None:
-        df = harespod_loader.load_subject(self.subject_id)
-        rng = np.random.default_rng(self._seed)
+        df = harespod_loader.load_subject(self.subject_id)  # already rescaled/altitude-interpolated by the loader
+        rng = np.random.default_rng(self._seed)  # seeded -> same synthesized temp column every time this subject+seed replays
         # See module docstring: no real temp sensor exists, so this is a
         # neutral (not severity-conditioned) synthesized fill-in, distinct
         # from label_real_data.py's training-time temp synthesis which DOES
         # condition on a known severity label -- there is no such label
         # available here since replay is meant to demonstrate the live
         # classification pipeline computing one, not assume it in advance.
-        temp_center = rng.uniform(*TEMP_NORMAL_RANGE)
-        temp_noise = rng.normal(0, 0.15, len(df))
-        df = df.assign(temp=temp_center + temp_noise)
+        temp_center = rng.uniform(*TEMP_NORMAL_RANGE)  # one fixed baseline for the whole recording, drawn from the normal range
+        temp_noise = rng.normal(0, 0.15, len(df))  # small per-reading jitter (sigma=0.15C) so temp isn't perfectly flat
+        df = df.assign(temp=temp_center + temp_noise)  # add the synthesized column without mutating the loader's original df
         self._readings = df[["timestamp", "spo2", "hr", "temp", "altitude"]].to_dict(
             orient="records"
         )
 
     def next_reading(self) -> Reading | None:
-        if self._index >= len(self._readings):
+        if self._index >= len(self._readings):  # recording exhausted -- signal end per the DataSource contract
             return None
         reading = self._readings[self._index]
-        self._index += 1
+        self._index += 1  # advance the simulated clock by one tick
         return reading
 
     def reset(self) -> None:
-        if not self._readings:
+        if not self._readings:  # only load once per instance -- reset() rewinds, it doesn't reload
             self._load()
         self._index = 0
 
