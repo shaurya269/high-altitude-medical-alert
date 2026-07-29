@@ -170,6 +170,18 @@
   .callout.decision { border-left-color: var(--cool); background: var(--cool-bg); }
   .callout b { display: block; margin-bottom: 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; }
 
+  /* data flow diagram */
+  .dfd-flow { display: flex; flex-direction: column; align-items: stretch; gap: 2px; margin: 20px 0; }
+  .dfd-stage { display: flex; gap: 14px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--line); border-left: 4px solid var(--sc, var(--muted)); background: var(--panel-2); }
+  .dfd-num { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; background: var(--sc, var(--muted)); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+  .dfd-body h4 { margin: 0 0 4px; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .dfd-body p { margin: 3px 0; font-size: 13px; color: var(--muted); }
+  .dfd-body p b { color: var(--ink); }
+  .dfd-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; font-weight: 700; padding: 2px 8px; border-radius: 100px; background: var(--line); color: var(--muted); }
+  .dfd-arrow { text-align: center; color: var(--faint); font-size: 16px; line-height: 1.2; }
+  .dfd-fork { display: flex; gap: 10px; }
+  .dfd-fork .dfd-stage { flex: 1; }
+
   /* glossary */
   .glossary-search { width: 100%; max-width: 420px; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line-strong);
     background: var(--panel-2); color: var(--ink); font-family: inherit; font-size: 14px; margin-bottom: 18px; }
@@ -211,6 +223,8 @@
   <div class="navtabs" id="navtabs">
     <button class="navtab active" data-tab="components" onclick="switchTab('components')">Components</button>
     <button class="navtab" data-tab="dataset" onclick="switchTab('dataset')">Dataset &amp; Decisions</button>
+    <button class="navtab" data-tab="metrics" onclick="switchTab('metrics')">Metrics &amp; Results</button>
+    <button class="navtab" data-tab="dataflow" onclick="switchTab('dataflow')">Data Flow</button>
     <button class="navtab" data-tab="glossary" onclick="switchTab('glossary')">Glossary</button>
   </div>
 
@@ -220,6 +234,8 @@
   </div>
 
   <div class="tabpage" id="tab-dataset"></div>
+  <div class="tabpage" id="tab-metrics"></div>
+  <div class="tabpage" id="tab-dataflow"></div>
   <div class="tabpage" id="tab-glossary"></div>
 
   <div class="footer">
@@ -288,9 +304,9 @@ const C = {
   baseline: {
     ic:"📏", name:"Rule-Based Baseline", layer:"l2", tool:"src/models/rule_baseline.py",
     sub:"The sanity floor every ML model must clearly beat.",
-    what:"Hand-written if/else thresholds, directly encoding the clinical reasoning in <code>docs/lls_mapping.md</code> — no learned parameters at all.",
-    how:"Cascades from most to least severe: very large SpO2 deviation (or a moderate deviation with a steep negative trend) → HAPE/HACE risk territory; then Severe AMS, Mild AMS, Normal. Also reused directly to <strong>label</strong> the real (Harespod) data post-hoc, since that data has no severity labels of its own.",
-    role_:"Exists purely as a floor. If a sophisticated model can't clearly beat this, that signals a real problem with the features or labels, not evidence the ML approach doesn't work.",
+    what:"Hand-written if/else thresholds, directly encoding the clinical reasoning in <code>docs/lls_mapping.md</code> — no learned parameters, no training step at all. <strong>Input:</strong> 3 engineered features for one row — <code>spo2_delta</code>, <code>hr</code>, <code>spo2_trend_5min</code> — coming from <code>feature_engineering.py</code>'s Stage 3 output. <strong>Output:</strong> one severity_index (0-4) per row, returned instantly with no model loading or inference latency.",
+    how:"'Training' here is really just writing the thresholds once, by hand, from the literature review — there's no fit() step, no data the rules are learned from. At PREDICTION time, <code>classify_row()</code> cascades from most to least severe: very large SpO2 deviation (or a moderate deviation with a steep negative trend) → HAPE/HACE risk territory; then Severe AMS, Mild AMS, Normal. The exact same function is also reused, unmodified, to <strong>label</strong> the real (Harespod) data post-hoc via <code>label_real_data.py</code>, since that data has no severity labels of its own — this is why real-data evaluation of this specific model would be circular and is never done.",
+    role_:"Exists purely as a floor, never as a candidate for production selection (<code>predict_severity.py</code>'s <code>run_comparison()</code> explicitly excludes it from the <code>min()</code> that picks a winner). Its OUTPUT (the label) also flows sideways into the training data pipeline, not just downstream to metrics — it's the mechanism that gives Harespod rows a severity_label in the first place, before those labeled rows ever reach XGBoost or the LSTM's training set.",
     why:"F1 0.285, Mean Abs Tier Error 0.819 — both ML models beat it clearly, confirming there's real learnable signal beyond hand-written rules.",
     fig:"bench", related:["harespod","xgboost","metrics"],
     kv:{ "Type":"if/else rules", "Learned params":"0", "F1 (macro)":"0.285", "Mean Abs Tier Error":"0.819", "Also used for":"labeling real data" }
@@ -298,9 +314,9 @@ const C = {
   xgboost: {
     ic:"🌳", name:"XGBoost Ordinal", layer:"l2", tool:"src/models/xgb_ordinal.py",
     sub:"The selected model — trained as a REGRESSOR, not a plain classifier.",
-    what:"Trained to regress the severity index as a continuous number (0.0-4.0), not classify into 5 unordered categories. A prediction of 3.7 for a true HACE-risk (4) case is a small loss; a prediction of 0.2 is a big one — the loss function itself understands tier ordering, which plain multi-class classification would throw away.",
-    how:"The continuous output is converted to a discrete tier via 4 threshold cut-points, tuned on the validation set (not naive rounding) to minimize mean absolute tier error. Class-imbalance is handled with balanced sample weights, computed from the training split only.",
-    role_:"The <strong>selected model</strong> — the one <code>predict_severity()</code> actually calls in the live pipeline. Feature importances confirm it leans on <code>spo2_delta</code> and <code>time_at_altitude_min</code> most heavily, matching clinical intuition rather than a spurious correlation.",
+    what:"<strong>Training input:</strong> the 9 <code>FEATURE_COLUMNS</code> (4 raw vitals + 5 engineered) for every row of the train split, plus each row's true severity_index (0.0-4.0) as the regression TARGET, plus a per-row sample_weight from <code>compute_sample_weight(\"balanced\", ...)</code>. <strong>Training output:</strong> 300 boosted decision trees saved to <code>src/models/artifacts/xgb_ordinal.json</code>, plus 4 tuned threshold cut-points saved to <code>xgb_thresholds.json</code>. <strong>Live-inference input:</strong> the same 9 features for ONE current row. <strong>Live-inference output:</strong> one continuous number (e.g. 2.31), immediately binned into a discrete severity_index by the saved thresholds.",
+    how:"<strong>How it trains:</strong> <code>XGBRegressor(n_estimators=300, max_depth=5, learning_rate=0.05, objective=\"reg:squarederror\")</code> builds 300 trees sequentially, each correcting the previous trees' errors on the CONTINUOUS severity index target — this is what teaches the loss function that predicting 3.7 for a true 4 is a small mistake and 0.2 is a big one, which plain multi-class classification would throw away. <code>early_stopping_rounds=20</code> halts training once validation MAE stops improving. <strong>How it predicts:</strong> <code>model.predict(X)</code> outputs the raw continuous number; <code>bin_predictions()</code> then converts it into one of 5 tiers using thresholds tuned on the VALIDATION set (not naive rounding) to minimize mean absolute tier error.",
+    role_:"The <strong>selected model</strong> — the one <code>predict_severity()</code> actually calls in the live pipeline (Stage 4 of the Data Flow). Its input comes directly from Stage 3 (Feature Engineering); its output (severity_index + confidence + model_used) flows to Stage 5 (Hysteresis Gate) AND to Stage 6A (the LLM, as ground-truth context it must never override). Feature importances confirm it leans on <code>spo2_delta</code> and <code>time_at_altitude_min</code> most heavily, matching clinical intuition rather than a spurious correlation.",
     why:"Won on Mean Absolute Tier Error (0.604) against both the baseline (0.819) and the LSTM (0.701) — the metric that best reflects real clinical cost, since it penalizes being 'many tiers wrong' far more than 'one tier wrong.'",
     fig:"ordinal", related:["baseline","lstm","features","hysteresis"],
     kv:{ "Approach":"Regression + tuned thresholds", "Selected?":"Yes", "Mean Abs Tier Error":"0.604", "Under-triage rate":"24.4%", "Top feature":"spo2_delta" }
@@ -308,9 +324,9 @@ const C = {
   lstm: {
     ic:"🔁", name:"LSTM Comparison Model", layer:"l2", tool:"src/models/lstm_model.py",
     sub:"A small 2-layer PyTorch LSTM — built to demonstrate the DL alternative honestly.",
-    what:"Trained on raw 60-second rolling windows of vitals (spo2, hr, temp, altitude) — NOT the hand-engineered trend features XGBoost sees. The idea being tested: can a recurrent network learn its own notion of 'trend' directly from a raw sequence, rather than needing a human to compute it as a feature?",
-    how:"Deliberately small (2 layers, modest hidden size) — this is a learning comparison, not a bid for maximum performance. Classifies directly into 5 classes with cross-entropy loss (a genuinely different strategy from XGBoost's ordinal regression), with class-balanced loss weighting for the same imbalance reason.",
-    role_:"Built and compared honestly, not built to lose — but its Mean Absolute Tier Error (0.701) was clearly worse than XGBoost's (0.604), so XGBoost was selected as the production model.",
+    what:"<strong>Training input:</strong> raw 60-second SLIDING WINDOWS of just 4 raw vitals (spo2, hr, temp, altitude) — NOT the hand-engineered trend features XGBoost sees — strided every 15 seconds through each subject's trajectory (<code>build_windows()</code>), labeled by the severity at each window's LAST timestep. <strong>Training output:</strong> ~30,917 learned weights saved to <code>src/models/artifacts/lstm_severity.pt</code>, plus the per-feature mean/std used to normalize inputs. <strong>Live-inference input:</strong> the trailing 60 readings from the live buffer. <strong>Live-inference output:</strong> a softmax probability distribution over the 5 tiers, collapsed to the single highest-probability tier via argmax.",
+    how:"<strong>How it trains:</strong> a 2-layer <code>nn.LSTM(hidden_size=48)</code> reads each 60-step window one timestep at a time, updating an internal 48-number memory; the FINAL timestep's hidden state feeds a small classifier head (Linear→ReLU→Dropout→Linear) producing 5 logits. Trained with <code>CrossEntropyLoss</code> (class-weighted the same 'balanced' way as XGBoost's sample_weight) via the Adam optimizer for up to 12 epochs, with early stopping (patience=3) restoring the best validation-loss checkpoint rather than the last epoch's weights. <strong>How it predicts:</strong> the idea being tested is whether a recurrent network can learn its own notion of 'trend' directly from the raw sequence, rather than needing a human to hand-engineer <code>spo2_trend_5min</code> as XGBoost requires.",
+    role_:"Built and compared honestly, not built to lose — evaluated by the exact same <code>predict_severity.py</code> comparison as XGBoost, on the same held-out test set — but its Mean Absolute Tier Error (0.701) was clearly worse than XGBoost's (0.604), so XGBoost was selected as the production model and the LSTM's saved weights sit unused unless <code>selected_model.json</code> is manually changed.",
     why:"The comparison is itself informative: XGBoost's regression-based ordinal-awareness measurably outperformed the LSTM's raw-sequence approach on THIS dataset size and shape — a real, evidence-based conclusion, not an assumption.",
     fig:"lstmwin", related:["xgboost","features"],
     kv:{ "Framework":"PyTorch", "Input":"raw 60s windows", "Layers":"2 (small, by design)", "Mean Abs Tier Error":"0.701", "Selected?":"No — XGBoost won" }
@@ -947,25 +963,32 @@ function buildDatasetTab(){
       <p class="subtitle">Three data sources feed this project — one synthetic (primary), two real (one used, one investigated and excluded). Every column, unit, and range below reflects what's actually in the code.</p>
 
       <h3>1. Synthetic Data — the primary dataset</h3>
+      <p><b>Source file:</b> <code class="mono">src/data/synth_data.py</code> (<code class="mono">generate_dataset()</code>) — no download, generated on demand from clinically-motivated ranges documented in <code class="mono">docs/lls_mapping.md</code>. Loaded downstream by <code class="mono">src/data/feature_engineering.py</code>.</p>
       <div class="table-wrap"><table>
-        <tr><th>Field</th><th>Unit</th><th>Range / detail</th></tr>
+        <tr><th>Column</th><th>Unit</th><th>Range / detail</th></tr>
         <tr><td class="mono">timestamp</td><td>seconds</td><td>0 to duration×60, 1Hz sampling</td></tr>
         <tr><td class="mono">spo2</td><td>%</td><td>50-100 (physiological clip), declines by tier</td></tr>
         <tr><td class="mono">hr</td><td>bpm</td><td>35-200 (physiological clip)</td></tr>
         <tr><td class="mono">temp</td><td>°C</td><td>36.1-37.2 normal band ± tier-specific delta</td></tr>
         <tr><td class="mono">altitude</td><td>meters</td><td>0 to a randomized cruise altitude, ramped in the first ~30% of the trajectory</td></tr>
-        <tr><td class="mono">severity_label</td><td>categorical</td><td>Normal, Mild AMS, Severe AMS, HAPE risk, HACE risk</td></tr>
+        <tr><td class="mono">subject_id</td><td>string</td><td><code>synth_0000</code>, <code>synth_0001</code>, ... — one per simulated subject, used to split by whole subject (never by row) in training</td></tr>
+        <tr><td class="mono">severity_label</td><td>categorical</td><td>Normal, Mild AMS, Severe AMS, HAPE risk, HACE risk — the ground-truth target this whole project predicts</td></tr>
       </table></div>
       <p><b>Population:</b> 400 subjects, 90 minutes each at 1Hz. <b>Tier prevalence</b> (deliberately imbalanced to mirror reality): Normal 55%, Mild AMS 22%, Severe AMS 13%, HAPE risk 6%, HACE risk 4%.</p>
       <div class="callout"><b>Design decision</b>Onset is always a sigmoid curve, never a step function — a model trained on instant jumps would learn to detect abrupt discontinuities, not the gradual real-world deterioration this system needs to catch.</div>
 
       <h3>2. Harespod — real ambient-air data</h3>
+      <p><b>Source files:</b> <code class="mono">src/data/harespod_loader.py</code> (<code class="mono">load_subject()</code>, <code class="mono">load_all_subjects()</code>) reads raw CSVs manually downloaded into <code class="mono">data/raw/harespod/</code> (Figshare DOI, not fetched automatically); <code class="mono">src/data/label_real_data.py</code> then applies <code class="mono">rule_baseline.classify_row()</code> post-hoc since Harespod ships with no severity labels of its own.</p>
       <div class="table-wrap"><table>
-        <tr><th>Field</th><th>Unit</th><th>Detail</th></tr>
-        <tr><td class="mono">spo2 (from spv column)</td><td>%</td><td>Rescaled from [0,1] normalized to a physiological 70-100% range</td></tr>
-        <tr><td class="mono">hr</td><td>bpm</td><td>Rescaled from [0,1] normalized to a physiological 40-160bpm range</td></tr>
-        <tr><td class="mono">altitude</td><td>meters</td><td>Interpolated from 6 discrete chamber-stage markers per subject (1500→4000m)</td></tr>
-        <tr><td class="mono">temp</td><td>°C</td><td>NOT a real sensor — synthesized per-tier, same distributions as synthetic data</td></tr>
+        <tr><th>Column</th><th>Unit</th><th>Detail</th></tr>
+        <tr><td class="mono">timestamp</td><td>seconds</td><td>Downsampled from Harespod's native 100Hz to this project's 1Hz</td></tr>
+        <tr><td class="mono">spo2 (from raw <code>spv</code> column)</td><td>%</td><td>Rescaled from [0,1] normalized to a physiological 70-100% range</td></tr>
+        <tr><td class="mono">hr (from raw <code>hr</code> column)</td><td>bpm</td><td>Rescaled from [0,1] normalized to a physiological 40-160bpm range</td></tr>
+        <tr><td class="mono">altitude</td><td>meters</td><td>Interpolated from 6 discrete chamber-stage markers per subject (1500→4000m), read from each subject's <code>key_timestamp.txt</code></td></tr>
+        <tr><td class="mono">subject_id</td><td>string</td><td>Original Harespod subject codes (e.g. <code>314c</code>, <code>328a</code>) — referenced directly in the GMT-offset bug below</td></tr>
+        <tr><td class="mono">temp</td><td>°C</td><td>NOT a real sensor — synthesized per-tier, same distributions as synthetic data (see <code class="mono">label_real_data.py</code>)</td></tr>
+        <tr><td class="mono">severity_label / severity_index</td><td>categorical / 0-4</td><td>NOT collected by Harespod — assigned post-hoc by <code class="mono">label_real_data.py</code> reusing the rule baseline's exact thresholds, so real data and the rule baseline can never silently disagree on what "Severe AMS" means</td></tr>
+        <tr><td class="mono">spo (raw waveform column)</td><td>—</td><td>Loaded but deliberately NOT used — this is the raw plethysmograph waveform, not a percentage, despite the misleading column name</td></tr>
       </table></div>
       <p><b>Subjects:</b> 15 (of 23 originally recruited — the paper itself excludes 8 for missing data). <b>Native sample rate:</b> 100Hz, downsampled to 1Hz. <b>Protocol:</b> confirmed ambient air (pressure reduction only) via the dataset's own published paper.</p>
 
@@ -976,25 +999,34 @@ function buildDatasetTab(){
       <div class="callout fix"><b>Fix</b>Detected per-subject by comparing the first marker's timestamp to the data's own minimum timestamp; if offset by ~8 hours, the markers are shifted back before interpolating. Two further per-subject exceptions were also handled explicitly: subject 314c's first marker was labeled "Start to Rec" instead of a number (treated as the same 1500m first stage), and subject 328a's protocol never reached 4000m (that marker is dropped rather than faked).</div>
 
       <h3>3. Pilot Altitude Dataset — investigated, excluded</h3>
+      <p><b>Source file:</b> <code class="mono">src/data/pilot_altitude_loader.py</code> — loaded and kept available for exploration, but explicitly never passed through <code class="mono">label_real_data.py</code>, so it never influences training or evaluation.</p>
       <div class="table-wrap"><table>
-        <tr><th>Field</th><th>Unit</th><th>Detail</th></tr>
+        <tr><th>Column</th><th>Unit</th><th>Detail</th></tr>
+        <tr><td class="mono">timestamp</td><td>seconds</td><td>Simulated-altitude-chamber session time</td></tr>
         <tr><td class="mono">spo2</td><td>%</td><td>Real absolute units, 88-100% observed — NO rescaling needed</td></tr>
         <tr><td class="mono">hr</td><td>bpm</td><td>Real absolute units, 43-179bpm observed</td></tr>
+        <tr><td class="mono">respiratory_rate</td><td>breaths/min</td><td>Loaded (part of <code>TIDY_COLUMNS</code>) but not currently used as a model feature by any of the 3 classifiers</td></tr>
         <tr><td class="mono">altitude</td><td>meters</td><td>4500-7500m simulated altitude</td></tr>
-        <tr><td class="mono">O2 / N2 / CO2</td><td>% concentration</td><td>The columns that revealed the disqualifying finding below</td></tr>
+        <tr><td class="mono">subject_id / data_source</td><td>string</td><td>Standard identity columns, same shape as the synthetic/Harespod loaders for pipeline compatibility</td></tr>
+        <tr><td class="mono">O2 / N2 / CO2</td><td>% concentration</td><td>The columns that revealed the disqualifying finding below — not part of <code>TIDY_COLUMNS</code>, inspected ad hoc from the raw files during investigation</td></tr>
       </table></div>
       <p><b>Subjects:</b> 20. <b>Why it looked promising:</b> real absolute-unit values (unlike Harespod's rescale ambiguity), higher and more clinically relevant altitude range, more subjects.</p>
       <div class="callout bug"><b>The disqualifying finding</b>A healthy 98% SpO2 reading at 7500m was flagged as severely abnormal by this project's ambient-air reference curve. Inspecting the dataset's own O2/N2/CO2 columns (loaded but not yet used) revealed subjects breathed <b>oxygen-enriched air (~40-45% O2) throughout</b> — vs ~21% in normal atmosphere — a fundamentally different physiological scenario than the ambient-air hypoxia this whole project models.</div>
       <div class="callout decision"><b>Decision</b>Kept loaded for exploration (e.g. comparing recovery-curve shapes), but excluded from severity labeling entirely — applying ambient-air thresholds to oxygen-enriched data would actively mislabel it, not just approximate it. Harespod was independently re-checked against the same question and confirmed to genuinely be ambient-air, via its own paper's Methods section.</div>
 
       <h3>4. Feature engineering — what the models actually train on</h3>
+      <p><b>Source file:</b> <code class="mono">src/data/feature_engineering.py</code> (<code class="mono">engineer_features()</code>, <code class="mono">FEATURE_COLUMNS</code>) — the SAME function runs at training time and live-inference time, so the two can never silently drift apart. All 9 columns below are what XGBoost and the rule baseline actually see; the LSTM instead sees only the 4 raw vitals as a 60-second raw sequence (see the Metrics &amp; Results tab for why).</p>
       <div class="table-wrap"><table>
-        <tr><th>Feature</th><th>Meaning</th></tr>
-        <tr><td class="mono">spo2_delta</td><td>Actual SpO2 minus altitude-EXPECTED SpO2 (not raw SpO2) — the single most important feature to every model</td></tr>
-        <tr><td class="mono">time_at_altitude_min</td><td>Minutes spent at/above a risk-relevant altitude — the second most important feature</td></tr>
-        <tr><td class="mono">spo2_trend_5min</td><td>Slope of SpO2 over the trailing 5 minutes</td></tr>
-        <tr><td class="mono">hr_trend_5min</td><td>Slope of heart rate over the trailing 5 minutes</td></tr>
-        <tr><td class="mono">ascent_rate</td><td>Meters of altitude gained per minute</td></tr>
+        <tr><th>Feature</th><th>Formula / Unit</th><th>Meaning</th></tr>
+        <tr><td class="mono">spo2</td><td>%</td><td>Raw current SpO2 reading, passed through unchanged</td></tr>
+        <tr><td class="mono">hr</td><td>bpm</td><td>Raw current heart rate, passed through unchanged</td></tr>
+        <tr><td class="mono">temp</td><td>°C</td><td>Raw current temperature, passed through unchanged</td></tr>
+        <tr><td class="mono">altitude</td><td>meters</td><td>Raw current altitude, passed through unchanged</td></tr>
+        <tr><td class="mono">spo2_delta</td><td>expected_spo2(altitude) − actual spo2</td><td>Actual SpO2 minus altitude-EXPECTED SpO2 (not raw SpO2) — the single most important feature to every model (34% of XGBoost's feature importance)</td></tr>
+        <tr><td class="mono">time_at_altitude_min</td><td>minutes since altitude first ≥ ALTITUDE_RISK_ONSET_M</td><td>Cumulative exposure time at/above a risk-relevant altitude (2500m) — the second most important feature (21%)</td></tr>
+        <tr><td class="mono">spo2_trend_5min</td><td>(SpO2 now − SpO2 5min ago) / 5min, vectorized via pandas <code>.shift()</code></td><td>Slope of SpO2 over the trailing 5 minutes — negative means worsening; HAPE/HACE risk can show a steep negative trend even before the absolute value looks alarming</td></tr>
+        <tr><td class="mono">hr_trend_5min</td><td>same formula as spo2_trend_5min, for heart rate</td><td>Slope of heart rate over the trailing 5 minutes</td></tr>
+        <tr><td class="mono">ascent_rate</td><td>(altitude now − altitude 1min ago) / 1min</td><td>Meters of altitude gained per minute — rapid ascent is itself a risk factor independent of current vitals</td></tr>
       </table></div>
 
       <h3>5. The train/val/test split — a bug and its fix</h3>
@@ -1009,6 +1041,7 @@ function buildDatasetTab(){
         <tr class="highlight" style="color:var(--oxygen)"><td>XGBoost Ordinal (selected)</td><td>0.386</td><td>0.381</td><td>0.354</td><td>0.604</td><td>0.244</td></tr>
         <tr><td>LSTM</td><td>0.403</td><td>0.408</td><td>0.397</td><td>0.701</td><td>0.203</td></tr>
       </table></div>
+      <p class="subtitle">What each of these columns actually means, the formula behind it, and how to read the numbers above → see the <b>Metrics &amp; Results</b> tab.</p>
 
       <h3>7. The Day 13 finding — an honest, unresolved limitation</h3>
       <div class="callout bug"><b>Finding</b>45% of true HAPE-risk/HACE-risk readings on the held-out test set predicted BELOW the hysteresis gate's alert-eligible tier (Severe AMS) — the system would never even attempt an alert for nearly half the most dangerous cases.</div>
@@ -1020,26 +1053,156 @@ function buildDatasetTab(){
 }
 
 /* ============================================================ *
+ *  METRICS & RESULTS TAB                                         *
+ * ============================================================ */
+function buildMetricsTab(){
+  const host = document.getElementById("tab-metrics");
+  host.innerHTML = `
+    <div class="ds-section">
+      <h2>Metrics &amp; Results, in full detail</h2>
+      <p class="subtitle">Every model (rule baseline, XGBoost, LSTM) is scored with literally the SAME function (<code class="mono">src/models/metrics.py</code>'s <code class="mono">evaluate()</code>) — this is what makes the comparison table below a fair fight, not five different scripts computing precision five slightly different ways.</p>
+
+      <h3>1. Why this project needs metrics beyond plain accuracy</h3>
+      <p>This is an <b>ordinal</b>, <b>imbalanced</b>, <b>safety-critical</b> classification problem, and each of those three properties breaks a different "obvious" metric:</p>
+      <div class="table-wrap"><table>
+        <tr><th>Property</th><th>What plain accuracy gets wrong</th></tr>
+        <tr><td><b>Ordinal</b> (tiers have a meaningful order)</td><td>Accuracy treats "predicted Normal, true HACE risk" (catastrophic) exactly the same as "predicted Mild AMS, true Severe AMS" (mild miss) — both just count as "wrong."</td></tr>
+        <tr><td><b>Imbalanced</b> (Normal is ~55% of the data, HACE risk ~4%)</td><td>A model that always predicts "Normal" gets ~55% accuracy for free while being completely useless at the one job that matters — catching danger.</td></tr>
+        <tr><td><b>Safety-critical</b> (a missed alert can matter more than a false one)</td><td>Accuracy can't tell you WHICH DIRECTION a wrong prediction erred — calling a Normal case "Severe" (annoying) and calling a true HACE case "Normal" (dangerous) look identical to it.</td></tr>
+      </table></div>
+
+      <h3>2. Precision, Recall, F1 — the standard classification metrics</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Metric</th><th>Formula</th><th>Meaning</th></tr>
+        <tr><td class="mono">Precision</td><td>TP / (TP + FP)</td><td>Of everything the model LABELED a given tier, what fraction actually was that tier — "when it says Severe AMS, how often is it right?"</td></tr>
+        <tr><td class="mono">Recall</td><td>TP / (TP + FN)</td><td>Of everything that TRULY IS a given tier, what fraction did the model catch — "of all real Severe AMS cases, how many did it find?"</td></tr>
+        <tr><td class="mono">F1</td><td>2 × (Precision × Recall) / (Precision + Recall)</td><td>The harmonic mean of precision and recall — punishes a model that's great at one but terrible at the other, unlike a plain average.</td></tr>
+      </table></div>
+      <div class="callout"><b>Why macro-averaging, specifically</b><code class="mono">precision_score(y_true, y_pred, average="macro")</code> computes each of the 5 tiers' precision separately, then averages those 5 numbers with EQUAL weight — Normal's score counts exactly as much as HACE risk's, even though Normal has ~14x more rows. Micro/weighted averaging would instead let the abundant Normal class dominate the average, exactly the failure mode CLAUDE.md's "Normal will dominate" warning is about.</div>
+
+      <h3>3. Mean Absolute Tier Error (MATE) — the ordinal-aware metric this project actually selects models by</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Formula</th><th class="mono">mean(abs(predicted_tier_index − true_tier_index))</th></tr>
+        <tr><td>In code</td><td class="mono">mate = float(np.mean(np.abs(y_pred - y_true)))</td></tr>
+      </table></div>
+      <p>MATE is the average number of TIERS a prediction is off by. 0 = perfect. A MATE of 1.0 means predictions are typically one tier away from the truth (e.g. Severe AMS predicted for a true HAPE-risk case) — a small, tolerable-scale mistake. A MATE of 3-4 means predictions are wildly, dangerously wrong (Normal predicted for a true HACE-risk case). Two models can have IDENTICAL accuracy (both 0% exact matches) with very different MATE — one making consistently-close mistakes, the other making wild swings — and MATE is what tells them apart.</p>
+      <div class="callout decision"><b>Why models are selected by MATE, not F1</b><code class="mono">predict_severity.py</code>'s <code class="mono">run_comparison()</code> picks the winner via <code class="mono">min(candidates, key=lambda r: r["mean_abs_tier_error"])</code> — MATE is the one metric that directly answers "how clinically costly are this model's mistakes on average," which is the actual question that matters for a medical alert system, more than raw exact-match rate.</div>
+
+      <h3>4. Under-triage rate — the direction of error that actually matters</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Formula</th><th class="mono">mean(predicted_tier_index &lt; true_tier_index)</th></tr>
+        <tr><td>In code</td><td class="mono">under_triage_rate = float(np.mean(y_pred < y_true))</td></tr>
+      </table></div>
+      <p><b>Under-triage</b> = predicting LESS severe than reality (e.g. true HAPE risk called Mild AMS) — the clinically dangerous direction, since the hysteresis gate and Telegram alert only fire based on the PREDICTED tier, so an under-triaged case might never trigger an alert at all. <b>Over-triage</b> = predicting MORE severe than reality — a false alarm, annoying but not dangerous. Two mistakes can have the identical MATE (both "off by 2 tiers") while being opposite directions — under-triage rate is tracked as its own explicit number specifically so it can never hide inside an aggregate MATE or accuracy figure.</p>
+
+      <h3>5. The verified comparison, with every number explained</h3>
+      <div class="table-wrap"><table>
+        <tr><th>Model</th><th>Precision</th><th>Recall</th><th>F1</th><th>MATE</th><th>Under-triage</th></tr>
+        <tr><td>Rule-based baseline</td><td>0.349</td><td>0.287</td><td>0.285</td><td>0.819</td><td>0.309</td></tr>
+        <tr class="highlight" style="color:var(--oxygen)"><td>XGBoost Ordinal (selected)</td><td>0.386</td><td>0.381</td><td>0.354</td><td>0.604</td><td>0.244</td></tr>
+        <tr><td>LSTM</td><td>0.403</td><td>0.408</td><td>0.397</td><td>0.701</td><td>0.203</td></tr>
+      </table></div>
+      <p><b>Reading these results honestly:</b> the LSTM actually has the HIGHEST precision, recall, and F1 of the three — on paper, the "best classifier." But its MATE (0.701) is clearly worse than XGBoost's (0.604): when the LSTM is wrong, it tends to be wrong by MORE tiers. XGBoost wins the selection specifically because MATE — not F1 — is the metric this project has decided reflects real clinical cost, and XGBoost's regression-based approach structurally bakes in "tier distance matters" in a way the LSTM's cross-entropy classification loss does not (see the <b>xgb_ordinal</b> and <b>lstm</b> components for the full mechanism). Both real models clearly beat the rule-based sanity floor on every column — confirming there's genuine learnable signal in the engineered features beyond hand-written thresholds.</p>
+      <div class="callout bug"><b>The number that started the Day 13 investigation</b>Under-triage rate alone doesn't show WHICH tiers are under-triaged worst. Digging deeper into the confusion matrix specifically for HAPE-risk/HACE-risk rows revealed that 45% of them predicted BELOW the hysteresis gate's alert-eligible tier (Severe AMS) — a finding invisible in the top-line 0.244 under-triage number, which averages across all 5 tiers evenly. See the Dataset &amp; Decisions tab's "Day 13 finding" section for the full investigation and why both attempted fixes were reverted.</div>
+    </div>
+  `;
+}
+
+/* ============================================================ *
+ *  DATA FLOW TAB                                                 *
+ * ============================================================ */
+function buildDataflowTab(){
+  const host = document.getElementById("tab-dataflow");
+  host.innerHTML = `
+    <div class="ds-section">
+      <h2>Data Flow — how one reading moves through the system</h2>
+      <p class="subtitle">Every reading, from any of the 3 Demo Mode sources, passes through the exact same 7 stages — this is the literal sequence <code class="mono">src/pipeline.py</code>'s <code class="mono">MedicalAlertPipeline.tick()</code> runs, once per reading. See <code class="mono">Architecture_Diagrams/03_data_flow_diagram.html</code> and <code class="mono">05_interactive_dataflow.html</code> for a dedicated, fully-interactive click-through version of this same flow.</p>
+
+      <div class="dfd-flow">
+        <div class="dfd-stage" style="--sc:var(--muted)">
+          <div class="dfd-num">1</div>
+          <div class="dfd-body"><h4>Reading produced</h4><p><b>Source:</b> Scenario player, manual sliders, or Harespod replay (<code class="mono">src/datasource/</code>) — all 3 implement the same <code class="mono">DataSource.next_reading()</code> contract.</p><p><b>Output:</b> one <code class="mono">{timestamp, spo2, hr, temp, altitude}</code> dict.</p></div>
+        </div>
+        <div class="dfd-arrow">↓</div>
+        <div class="dfd-stage" style="--sc:var(--cool)">
+          <div class="dfd-num">2</div>
+          <div class="dfd-body"><h4>Buffer &amp; validate</h4><p><b>Tool:</b> <code class="mono">src/datasource/buffer.py</code>'s <code class="mono">ReadingBuffer</code>. Rejects physiologically-impossible values (e.g. SpO2 outside 0-100%) before they reach any model; keeps a rolling 10-minute window.</p><p><b>Output:</b> validated reading appended to the buffer, or rejected with a count incremented (never raises).</p></div>
+        </div>
+        <div class="dfd-arrow">↓</div>
+        <div class="dfd-stage" style="--sc:var(--warn)">
+          <div class="dfd-num">3</div>
+          <div class="dfd-body"><h4>Feature engineering</h4><p><b>Tool:</b> <code class="mono">src/data/feature_engineering.py</code>'s <code class="mono">engineer_features()</code> — the SAME function used at training time.</p><p><b>Input:</b> the buffer's last ~10 minutes of raw readings. <b>Output:</b> the 9 <code class="mono">FEATURE_COLUMNS</code> (raw vitals + 5 derived features) for the latest row.</p></div>
+        </div>
+        <div class="dfd-arrow">↓</div>
+        <div class="dfd-stage" style="--sc:var(--oxygen)">
+          <div class="dfd-num">4</div>
+          <div class="dfd-body"><h4>ML severity classification</h4><p><b>Tool:</b> <code class="mono">src/models/predict_severity.py</code>'s <code class="mono">predict_severity()</code>, internally calling whichever model <code class="mono">selected_model.json</code> names (XGBoost Ordinal by default).</p><p><b>Input:</b> the 9 engineered features. <b>Output:</b> <code class="mono">{severity_index, severity_label, confidence, model_used}</code>.</p></div>
+        </div>
+        <div class="dfd-arrow">↓</div>
+        <div class="dfd-stage" style="--sc:var(--alert)">
+          <div class="dfd-num">5</div>
+          <div class="dfd-body"><h4>Hysteresis gate</h4><p><b>Tool:</b> <code class="mono">src/alerts/hysteresis.py</code>'s <code class="mono">HysteresisGate.evaluate()</code>.</p><p><b>Input:</b> this tick's <code class="mono">severity_index</code>. <b>Output:</b> a single boolean — fire an alert now, or not — true only if severity has stayed at/above Severe AMS for 3 consecutive readings AND 15 minutes have passed since the last alert.</p></div>
+        </div>
+        <div class="dfd-arrow">↓</div>
+        <div class="dfd-fork">
+          <div class="dfd-stage" style="--sc:var(--cool)"><div class="dfd-num">6A</div><div class="dfd-body"><h4>LLM interpretation<span class="dfd-tag">always runs</span></h4><p><b>Tool:</b> <code class="mono">src/llm/llm_chat.py</code>'s <code class="mono">explain_severity()</code> (Groq gpt-oss-120b).</p><p><b>Input:</b> severity + confidence + current vitals, injected as ground truth the LLM must never override. <b>Output:</b> a plain-language explanation string for the dashboard, cached per severity-TIER-change (not regenerated every tick).</p></div></div>
+          <div class="dfd-stage" style="--sc:var(--alert)"><div class="dfd-num">6B</div><div class="dfd-body"><h4>Telegram alert<span class="dfd-tag">only if gate passes</span></h4><p><b>Tool:</b> <code class="mono">src/llm/llm_chat.py</code>'s <code class="mono">generate_alert_content()</code> (structured JSON) then <code class="mono">src/alerts/alert_bot.py</code>'s <code class="mono">send_alert()</code>.</p><p><b>Input:</b> severity + vitals. <b>Output:</b> a formatted message sent to Telegram (or logged locally if unconfigured).</p></div></div>
+        </div>
+        <div class="dfd-arrow">↓</div>
+        <div class="dfd-stage" style="--sc:var(--purple)">
+          <div class="dfd-num">7</div>
+          <div class="dfd-body"><h4>Dashboard renders</h4><p><b>Tool:</b> <code class="mono">src/app/streamlit_app.py</code>.</p><p><b>Input:</b> the full <code class="mono">TickResult</code> (reading, severity, explanation, alert_fired, alert_result). <b>Output:</b> live vitals charts, the severity readout card, the ALERT! popup if one just fired, and the alert log tab — the one thing an actual user sees.</p></div>
+        </div>
+      </div>
+
+      <h3>System architecture — the layers this flow runs through</h3>
+      <p>The 7-stage flow above is the RUNTIME path. Two more layers exist around it: the offline TRAINING layer (Days 1-7: synthetic/real data → feature engineering → 3 candidate models → comparison → one selected model saved to <code class="mono">src/models/artifacts/</code>) that produces the model Stage 4 loads, and the DEMO layer (3 interchangeable <code class="mono">DataSource</code> implementations feeding Stage 1, standing in for a future real Arduino-based hardware source that would implement the exact same interface).</p>
+      <div class="callout"><b>Why this matters architecturally</b>Every stage only depends on the SHAPE of what the previous stage produces, never on which concrete implementation produced it — this is what lets the selected ML model change (XGBoost → LSTM) or the data source change (synthetic → real hardware) with zero changes to any other stage.</div>
+    </div>
+  `;
+}
+
+/* ============================================================ *
  *  GLOSSARY TAB                                                  *
  * ============================================================ */
 const GLOSSARY = [
-  { term:"AMS", cat:"clinical", def:"Acute Mountain Sickness — the mildest, most common form of altitude illness. Headache plus at least one other symptom (nausea, fatigue, dizziness) at altitude." },
+  // --- Diseases & clinical terms -------------------------------------
+  { term:"Altitude illness", cat:"clinical", def:"The umbrella term for AMS, HAPE, and HACE — the family of conditions caused by ascending faster than the body can acclimatize to reduced oxygen availability. This project's 5 severity tiers (Normal → Mild AMS → Severe AMS → HAPE risk → HACE risk) model increasing severity within this family." },
+  { term:"AMS", cat:"clinical", def:"Acute Mountain Sickness — the mildest, most common form of altitude illness. Headache plus at least one other symptom (nausea, fatigue, dizziness) at altitude. Split into 'Mild AMS' and 'Severe AMS' tiers in this project." },
   { term:"HAPE", cat:"clinical", def:"High-Altitude Pulmonary Edema — fluid buildup in the lungs at altitude. Serious; the 4th severity tier in this project (\"HAPE risk\")." },
   { term:"HACE", cat:"clinical", def:"High-Altitude Cerebral Edema — brain swelling at altitude, the most dangerous altitude illness. The 5th and most severe tier in this project." },
   { term:"Lake Louise Score (LLS)", cat:"clinical", def:"A symptom self-report QUESTIONNAIRE for AMS severity (headache, GI symptoms, fatigue, dizziness, sleep disturbance) — NOT a sensor reading. This project's severity tiers are a literature-derived MAPPING from LLS concepts to sensor patterns, documented in docs/lls_mapping.md, not a validated clinical instrument." },
   { term:"SpO2", cat:"clinical", def:"Peripheral oxygen saturation — the percentage of hemoglobin in blood carrying oxygen, measured by a pulse oximeter. Drops at altitude as available oxygen decreases." },
-  { term:"Ordinal classification", cat:"ml", def:"A classification problem where the categories have a meaningful ORDER (Normal < Mild AMS < Severe AMS < HAPE risk < HACE risk) — unlike plain multi-class classification, being 'one tier off' should be scored as less wrong than being 'four tiers off.'" },
-  { term:"Mean Absolute Tier Error (MATE)", cat:"ml", def:"The average |predicted tier index − true tier index| across all predictions. 0 = perfect. This is the ordinal-aware metric this project actually selects models by — it directly measures 'how clinically costly are this model's mistakes on average.'" },
-  { term:"Under-triage", cat:"ml", def:"A prediction that UNDERESTIMATES true severity (e.g. predicting Mild AMS when the truth is Severe AMS) — the clinically dangerous direction of error, since it could mean a missed alert." },
-  { term:"Over-triage", cat:"ml", def:"A prediction that OVERESTIMATES true severity — annoying (a false alarm) but not dangerous the way under-triage is." },
-  { term:"Under-triage rate", cat:"ml", def:"The fraction of all predictions that under-triage (predicted tier < true tier). Tracked as its own explicit metric so it can't hide inside an aggregate accuracy number." },
-  { term:"Asymmetric tuning / asymmetric tier error", cat:"ml", def:"A Day 13 fix attempt: weighting under-triage errors more heavily than over-triage errors of the same size when tuning XGBoost's threshold cut-points. Tried at weight 3.0 and 1.5, both caused false alerts on Normal scenarios, both reverted." },
-  { term:"Macro-averaging", cat:"ml", def:"Computing a metric (precision/recall/F1) per class and then averaging those PER-CLASS scores equally — as opposed to micro/weighted averaging, which lets the most common class (Normal) dominate. Macro-averaging is what stops a model that ignores rare dangerous classes from still looking good on paper." },
-  { term:"Ensemble / regression vs. classification", cat:"ml", def:"XGBoost here is trained as a REGRESSOR on the continuous severity index (0.0-4.0), not a classifier on 5 discrete labels — this is what lets its loss function understand that tier 4 is 'far' from tier 0 but 'close' to tier 3." },
-  { term:"Threshold tuning / threshold cut-points", cat:"ml", def:"After XGBoost outputs a continuous number, 4 cut-points convert it into one of 5 discrete tiers. These cut-points are tuned on the validation set to minimize error, rather than naively rounding to the nearest integer." },
-  { term:"Class imbalance", cat:"ml", def:"When some classes (severity tiers) are far rarer than others — Normal is ~55% of the synthetic data, HACE risk only ~4%. Handled via balanced sample weights during training, not by artificially generating equal numbers of each tier (which would misrepresent real-world prevalence)." },
-  { term:"LSTM (Long Short-Term Memory)", cat:"ml", def:"A type of recurrent neural network that processes a SEQUENCE (here, 60 seconds of raw vitals) and can, in principle, learn temporal patterns like trends directly from the raw data, without needing a human to hand-engineer a 'trend' feature first." },
-  { term:"XGBoost", cat:"ml", def:"A gradient-boosted decision tree library — the selected model in this project, trained as a regressor (see 'ordinal classification')." },
+  { term:"Ambient air vs. oxygen-enriched", cat:"clinical", def:"Ambient air hypoxia (what this project models) comes from REDUCED PRESSURE at altitude lowering available oxygen. Oxygen-enriched protocols (the disqualified pilot dataset) supplement inspired air with extra O2, protecting subjects from the hypoxia altitude would otherwise cause — a fundamentally different physiological scenario." },
+  { term:"Hypoxia", cat:"clinical", def:"A state of reduced oxygen availability to body tissue — the root physiological cause of every altitude illness this project models. Ambient-air hypoxia (real mountain conditions) is distinct from the disqualified pilot dataset's oxygen-enriched protocol, which prevents hypoxia from occurring at all." },
+  { term:"Severity tier / severity index", cat:"clinical", def:"The 5-level ORDINAL target this whole project predicts: Normal (index 0), Mild AMS (1), Severe AMS (2), HAPE risk (3), HACE risk (4). 'Tier' is the human-readable name, 'index' is the integer a model actually outputs — see config.py's SEVERITY_TIERS / SEVERITY_INDEX." },
+
+  // --- Models & training (ML) ------------------------------------------
+  { term:"XGBoost", cat:"models", def:"A gradient-boosted decision tree library — the SELECTED model in this project, trained as a regressor (see 'Ordinal classification' / 'Regression vs. classification')." },
+  { term:"LSTM (Long Short-Term Memory)", cat:"models", def:"A type of recurrent neural network that processes a SEQUENCE (here, 60 seconds of raw vitals) and can, in principle, learn temporal patterns like trends directly from the raw data, without needing a human to hand-engineer a 'trend' feature first. The comparison model in this project — built honestly, evaluated fairly, and NOT selected." },
+  { term:"Rule-based baseline", cat:"models", def:"A hand-written if/else decision tree with zero learned parameters, encoding docs/lls_mapping.md's clinical thresholds directly. Exists purely as a sanity floor every ML model must clearly beat — never itself eligible for production selection." },
+  { term:"Ensemble / regression vs. classification", cat:"models", def:"XGBoost here is trained as a REGRESSOR on the continuous severity index (0.0-4.0), not a classifier on 5 discrete labels — this is what lets its loss function understand that tier 4 is 'far' from tier 0 but 'close' to tier 3." },
+  { term:"Hyperparameter", cat:"models", def:"A training-time setting chosen by the developer BEFORE training starts (e.g. XGBoost's n_estimators=300, max_depth=5, learning_rate=0.05; the LSTM's hidden_size=48, epochs=12) — distinct from the model's learned WEIGHTS, which training itself discovers." },
+  { term:"Early stopping", cat:"models", def:"Halting training once a held-out validation metric stops improving for a set number of rounds (XGBoost: 20 rounds via early_stopping_rounds; LSTM: 3 epochs via patience), then keeping the BEST checkpoint seen — not whichever the final round happened to produce, which risks being overfit." },
+  { term:"Softmax", cat:"models", def:"A function that converts a neural network's raw output scores (logits) into a valid probability distribution that sums to 1.0 — used by the LSTM's final layer to turn 5 raw tier scores into 5 genuine probabilities, one of which becomes 'confidence'." },
+  { term:"Confidence (proxy)", cat:"models", def:"A 0-1 number accompanying every severity prediction. For the LSTM this is a real softmax probability. For XGBoost (a regressor, with no native probability) it's a PROXY: how close the continuous prediction sits to the center of its bin vs. an edge — explicitly documented as NOT a calibrated probability, to avoid implying more precision than the number has." },
+  { term:"Feature importance", cat:"models", def:"A per-feature score (from XGBoost's trained trees) showing how much each input feature contributed to the model's predictions on average. Used as a sanity check here: spo2_delta and time_at_altitude_min dominating (55%+ combined) confirms the model learned clinically sensible signal, not a spurious correlation." },
+  { term:"Threshold tuning / threshold cut-points", cat:"models", def:"After XGBoost outputs a continuous number, 4 cut-points convert it into one of 5 discrete tiers. These cut-points are tuned on the validation set to minimize error, rather than naively rounding to the nearest integer." },
+  { term:"Class imbalance", cat:"models", def:"When some classes (severity tiers) are far rarer than others — Normal is ~55% of the synthetic data, HACE risk only ~4%. Handled via balanced sample weights during training, not by artificially generating equal numbers of each tier (which would misrepresent real-world prevalence)." },
+  { term:"Ordinal classification", cat:"models", def:"A classification problem where the categories have a meaningful ORDER (Normal < Mild AMS < Severe AMS < HAPE risk < HACE risk) — unlike plain multi-class classification, being 'one tier off' should be scored as less wrong than being 'four tiers off.'" },
+
+  // --- Metrics & evaluation ---------------------------------------------
+  { term:"Precision", cat:"metrics", def:"TP / (TP + FP) — of everything the model LABELED a given tier, what fraction actually was that tier. 'When it says Severe AMS, how often is it right?'" },
+  { term:"Recall", cat:"metrics", def:"TP / (TP + FN) — of everything that TRULY IS a given tier, what fraction the model caught. 'Of all real Severe AMS cases, how many did it find?'" },
+  { term:"F1 score", cat:"metrics", def:"The harmonic mean of precision and recall: 2×(P×R)/(P+R). Punishes a model that's great at one but terrible at the other, unlike a plain average of the two." },
+  { term:"Macro-averaging", cat:"metrics", def:"Computing a metric (precision/recall/F1) per class and then averaging those PER-CLASS scores equally — as opposed to micro/weighted averaging, which lets the most common class (Normal) dominate. Macro-averaging is what stops a model that ignores rare dangerous classes from still looking good on paper." },
+  { term:"Mean Absolute Tier Error (MATE)", cat:"metrics", def:"The average |predicted tier index − true tier index| across all predictions. 0 = perfect. This is the ordinal-aware metric this project actually selects models by — it directly measures 'how clinically costly are this model's mistakes on average.'" },
+  { term:"Under-triage", cat:"metrics", def:"A prediction that UNDERESTIMATES true severity (e.g. predicting Mild AMS when the truth is Severe AMS) — the clinically dangerous direction of error, since it could mean a missed alert." },
+  { term:"Over-triage", cat:"metrics", def:"A prediction that OVERESTIMATES true severity — annoying (a false alarm) but not dangerous the way under-triage is." },
+  { term:"Under-triage rate", cat:"metrics", def:"The fraction of all predictions that under-triage (predicted tier < true tier). Tracked as its own explicit metric so it can't hide inside an aggregate accuracy number." },
+  { term:"Asymmetric tuning / asymmetric tier error", cat:"metrics", def:"A Day 13 fix attempt: weighting under-triage errors more heavily than over-triage errors of the same size when tuning XGBoost's threshold cut-points. Tried at weight 3.0 and 1.5, both caused false alerts on Normal scenarios, both reverted." },
+
+  // --- System design (pipeline, alerts, data flow) -----------------------
   { term:"Hysteresis / hysteresis gate", cat:"system", def:"The logic deciding WHETHER an alert fires: severity must be at/above the alert-eligible tier for 3 consecutive readings (any dip resets the streak) AND at least 15 minutes must have passed since the last alert. Named after the physics concept of a system whose output depends on its recent history, not just its current state." },
   { term:"Consecutive-reading streak", cat:"system", def:"How many readings IN A ROW have been at/above the alert-eligible severity tier. Resets to zero the moment a single reading drops below that tier — this is what actually distinguishes sustained illness from a single noisy spike." },
   { term:"Cooldown", cat:"system", def:"The minimum time (15 minutes in this project) that must elapse after an alert fires before another can fire — prevents a sustained dangerous episode from spamming the same alert every second." },
@@ -1048,38 +1211,70 @@ const GLOSSARY = [
   { term:"Demo Mode", cat:"system", def:"The current, complete phase of this project: the entire pipeline runs against synthetic and replayed data, with no physical hardware required or built yet." },
   { term:"Rolling buffer", cat:"system", def:"A fixed-size trailing window (10 minutes in this project) of recent readings, implemented with a deque(maxlen=...) so old readings automatically fall off as new ones arrive." },
   { term:"Seed / random seed", cat:"system", def:"A number that makes 'random' generation reproducible — the same seed always produces the exact same synthetic trajectory or model initialization, which is what let Day 13's false-alarm testing be repeated deterministically across specific seeds (0 through 9)." },
+  { term:"Fallback / graceful degradation", cat:"system", def:"The principle that every optional dependency (Groq API key, Telegram credentials, downloaded real datasets) has a safe, working default behavior if it's missing — nothing in this project crashes just because a key wasn't set." },
+  { term:"Sigmoid onset curve", cat:"system", def:"The S-shaped curve (flat, then rising, then plateauing) used by the synthetic data generator to ramp symptoms in gradually rather than as an instant step function — matches real physiological deterioration and avoids teaching a model to detect artificial discontinuities." },
+
+  // --- LLM / conversational layer ----------------------------------------
   { term:"Guardrail", cat:"llm", def:"A hard rule the LLM must never violate, stated explicitly in its system prompt: never diagnose, never override the ML classification, never give dosing advice, never discourage seeking real help." },
   { term:"System prompt", cat:"llm", def:"The instruction text given to the LLM before every conversation, defining its role and boundaries — shared by every LLM function in this project (interpretation, chat, alert generation) so guardrails can't drift between call sites." },
   { term:"RAG (Retrieval-Augmented Generation)", cat:"llm", def:"A pattern where real data is retrieved FIRST and the LLM generates from that real data only — used elsewhere (e.g. CineMind) to stop hallucination; in THIS project, ground-truth severity + vitals play the analogous role of 'real data the LLM must ground its response in.'" },
-  { term:"Fallback / graceful degradation", cat:"system", def:"The principle that every optional dependency (Groq API key, Telegram credentials, downloaded real datasets) has a safe, working default behavior if it's missing — nothing in this project crashes just because a key wasn't set." },
-  { term:"Ambient air vs. oxygen-enriched", cat:"clinical", def:"Ambient air hypoxia (what this project models) comes from REDUCED PRESSURE at altitude lowering available oxygen. Oxygen-enriched protocols (the disqualified pilot dataset) supplement inspired air with extra O2, protecting subjects from the hypoxia altitude would otherwise cause — a fundamentally different physiological scenario." },
+  { term:"Groq", cat:"llm", def:"The LLM inference API this project uses (chosen for its generous free tier and fast inference) — currently serving openai/gpt-oss-120b, previously llama-3.3-70b-versatile before a free-tier quota limit was hit." },
+  { term:"Reasoning model / reasoning tokens", cat:"llm", def:"A model (like the current gpt-oss-120b, unlike the previous Llama 3.3 70B) that spends a variable, hidden chunk of its output-token budget on internal 'thinking' before producing the visible answer. Discovered the hard way: the old max_tokens limits (200-300, fine for non-reasoning Llama) caused 4-of-5 explanations to truncate mid-sentence until raised to 600." },
+
+  // --- Data & datasets -----------------------------------------------------
   { term:"Rescaling (Harespod)", cat:"data", def:"Harespod's raw signals are min-max NORMALIZED to [0,1] per subject with the true original scale unrecoverable. This project rescales onto a physiologically-plausible range (not the device's raw collection range, which produced an implausible 174bpm resting heart rate) — explicitly an approximation, documented as such." },
   { term:"GMT offset bug", cat:"data", def:"A real bug: 6 of 15 Harespod subjects had their altitude timestamp markers recorded exactly 8 hours ahead of their vitals data, per a documented GMT/local-time mismatch in the files. Unfixed, this silently produced a constant (wrong) altitude for the whole recording." },
   { term:"Temporal split", cat:"data", def:"Splitting data by TIME (not randomly) so validation/test represent 'the future' relative to training — required because shuffling time-series data randomly would let the model implicitly see future information during training." },
   { term:"Tier-stratified split", cat:"data", def:"This project's actual split method: group subjects by severity tier FIRST, then split chronologically WITHIN each tier — fixes a real bug where a plain chronological split across all subjects starved the rarest tier (HACE risk) out of validation and test entirely." },
 ];
 
+const CAT_META = {
+  clinical: { label:"Diseases & clinical terms", color:"var(--alert)" },
+  models:   { label:"Models & training (ML)",     color:"var(--cool)" },
+  metrics:  { label:"Metrics & evaluation",        color:"var(--warn)" },
+  system:   { label:"System design (pipeline & alerts)", color:"var(--purple)" },
+  llm:      { label:"LLM / conversational layer",  color:"var(--cool)" },
+  data:     { label:"Data & datasets",             color:"var(--oxygen)" },
+};
+const CAT_ORDER = ["clinical","models","metrics","system","llm","data"];
+
 function buildGlossaryTab(){
   const host = document.getElementById("tab-glossary");
   host.innerHTML = `
     <div class="ds-section">
       <h2>Glossary — every term used across this project</h2>
-      <p class="subtitle">Clinical terms, ML/statistics concepts, system-design vocabulary, and LLM/data terminology — all in one searchable place.</p>
+      <p class="subtitle">Grouped by topic — diseases, models, metrics, system design, LLM, and data — so related terms sit together. Search filters across all groups at once.</p>
       <input type="text" class="glossary-search" id="glossSearch" placeholder="Search terms (e.g. 'triage', 'hysteresis', 'HACE')..." oninput="filterGlossary()">
-      <div class="gloss-grid" id="glossGrid"></div>
+      <div id="glossGroups"></div>
     </div>
   `;
   renderGlossary(GLOSSARY);
 }
-const CAT_COLORS = { clinical:"var(--alert)", ml:"var(--cool)", system:"var(--purple)", llm:"var(--warn)", data:"var(--oxygen)" };
+const CAT_COLORS = { clinical:"var(--alert)", models:"var(--cool)", metrics:"var(--warn)", system:"var(--purple)", llm:"var(--cool)", data:"var(--oxygen)" };
 function renderGlossary(items){
-  const grid = document.getElementById("glossGrid");
-  grid.innerHTML = items.map(g => `
-    <div class="gloss-card" style="border-left:3px solid ${CAT_COLORS[g.cat]}">
-      <h4>${g.term} <span class="cat">${g.cat}</span></h4>
-      <p>${g.def}</p>
-    </div>
-  `).join("") || `<p style="color:var(--muted);grid-column:1/-1">No terms match your search.</p>`;
+  const host = document.getElementById("glossGroups");
+  if (!items.length){
+    host.innerHTML = `<p style="color:var(--muted)">No terms match your search.</p>`;
+    return;
+  }
+  host.innerHTML = CAT_ORDER.map(cat => {
+    const group = items.filter(g => g.cat === cat);
+    if (!group.length) return "";
+    return `
+      <h3 style="margin:22px 0 10px;font-size:15px;display:flex;align-items:center;gap:8px;">
+        <span style="width:9px;height:9px;border-radius:50%;background:${CAT_META[cat].color};display:inline-block"></span>
+        ${CAT_META[cat].label} <span style="color:var(--faint);font-weight:400;font-size:12.5px">(${group.length})</span>
+      </h3>
+      <div class="gloss-grid">
+        ${group.map(g => `
+          <div class="gloss-card" style="border-left:3px solid ${CAT_COLORS[g.cat]}">
+            <h4>${g.term}</h4>
+            <p>${g.def}</p>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }).join("");
 }
 function filterGlossary(){
   const q = document.getElementById("glossSearch").value.toLowerCase();
@@ -1102,6 +1297,8 @@ function toggleTheme(){
 buildLegend();
 buildMap();
 buildDatasetTab();
+buildMetricsTab();
+buildDataflowTab();
 buildGlossaryTab();
 
 window.addEventListener("load", ()=>{ const h=location.hash.slice(1); if(h && C[h]) openDetail(h); });
