@@ -168,6 +168,7 @@
       <a href="#config">config.py</a>
       <a href="#synth">synth_data.py</a>
       <a href="#harespod">harespod_loader.py</a>
+      <a href="#pilot">pilot_altitude_loader.py</a>
       <a href="#features">feature_engineering.py</a>
 
       <div class="group-label">Days 4-7 · Models</div>
@@ -402,6 +403,32 @@ elif abs(offset_hours) > 0.1:
     raise ValueError(f"{subject_dir}: unexpected {offset_hours:.2f}h offset")</code></pre>
           <div class="bug-box"><b>Unfixed impact:</b> the interpolation markers would never overlap the actual data timeline, silently producing a CONSTANT altitude for the whole recording instead of a real ascent profile.</div>
           <div class="fix-box"><b>Fix:</b> detected per-subject by comparing the first marker's time to the data's own minimum timestamp; corrected before interpolating. Two further per-subject exceptions handled explicitly: subject 314c's first marker read "Start to Rec" instead of a number; subject 328a's protocol never reached 4000m (that marker is dropped, not faked).</div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- PILOT ALTITUDE LOADER -->
+    <!-- ============================================================ -->
+    <section class="phase" id="pilot">
+      <div class="phase-head"><h2>pilot_altitude_loader.py</h2><span class="phase-tag">investigated, excluded</span></div>
+      <p class="phase-sub">A second real dataset — loaded, thoroughly investigated, and deliberately excluded from severity labeling.</p>
+
+      <article class="file">
+        <div class="io-row"><span><span class="io-label">Requires</span>data/raw/pilot_altitude/ (manual download)</span></div>
+
+        <div class="cell">
+          <div class="cell-title"><span class="num">1</span>Why it looked like a strictly better real-data source</div>
+          <p class="cell-explain">20 pilots monitored across 4500-7500m simulated altitude — real absolute-unit SpO2 (88-100%) and HR (43-179bpm) values, confirmed directly from the raw CSVs with no rescaling ambiguity, unlike Harespod's normalized-to-[0,1] columns. Higher, more clinically relevant altitude range too.</p>
+        </div>
+
+        <div class="cell">
+          <div class="cell-title"><span class="num">2</span>The disqualifying finding</div>
+<pre><code class="cm"># A healthy 98% SpO2 reading at 7500m was flagged as SEVERELY
+# ABNORMAL by this project's ambient-air reference curve
+# (expected_spo2(7500m) predicts a much lower "normal" value).</code></pre>
+          <div class="bug-box"><b>Investigation:</b> inspecting the dataset's own O2/N2/CO2 gas-composition columns (loaded but not used as model features) revealed the subjects breathed <b>oxygen-enriched air (~40-45% O2) throughout</b> — vs ~21% in normal atmosphere. A fundamentally different physiological scenario than the ambient-air hypoxia this entire project's clinical mapping (<code>docs/lls_mapping.md</code>) is built around.</div>
+          <div class="fix-box"><b>Decision:</b> kept loaded and available for exploration (e.g. comparing recovery-curve shapes), but explicitly excluded from ever passing through <code>label_real_data.py</code> — applying ambient-air thresholds to oxygen-enriched data would have actively MISLABELED it, not just approximated it. Harespod was independently re-checked against this same question and confirmed to genuinely be ambient-air, via its own paper's Methods section — so the exclusion here isn't a blanket distrust of real data, it's specific to this one dataset's protocol.</div>
         </div>
       </article>
     </section>
@@ -830,7 +857,14 @@ explanation = self._cached_explanation</code></pre>
           <div class="why-box">Streamlit reruns the ENTIRE script top-to-bottom on every interaction. Without session_state, the pipeline object — along with the buffer and the hysteresis gate's accumulated streak — would be recreated from scratch on every click, and the "3 consecutive readings" logic could never accumulate across ticks.</div>
         </div>
         <div class="cell">
-          <div class="cell-title"><span class="num">2</span>A moment that looked like a bug, but wasn't</div>
+          <div class="cell-title"><span class="num">2</span>Why "step forward," not a background thread</div>
+<pre><code class="cm"># Each "step" is one full pipeline.tick() call inside a normal
+# Streamlit rerun -- there is no thread driving ticks independently
+# of the rerun cycle.</code></pre>
+          <div class="why-box">A background thread advancing ticks on its own IS technically possible, and would simulate true real-time speed more faithfully. It was deliberately not built: it adds real complexity (thread-safety around <code>st.session_state</code>, orphaned threads if the user navigates away mid-run) for a demo whose whole point is showing the pipeline's behavior clearly, not simulating wall-clock realism. A manual/auto-play "step forward" button — each step being one ordinary <code>pipeline.tick()</code> call inside a normal Streamlit rerun — is simpler and just as effective for the demo's purpose.</div>
+        </div>
+        <div class="cell">
+          <div class="cell-title"><span class="num">3</span>A moment that looked like a bug, but wasn't</div>
           <p class="cell-explain">During real-browser verification with Playwright, after only 5 "Step forward" clicks, the severity readout still showed the empty placeholder and the charts showed "Infinite extent" console warnings.</p>
           <div class="why-box"><b>Not a bug:</b> stepping forward past 60 readings (the model's minimum-history requirement) resolved it completely. This became a permanent regression test using <code>streamlit.testing.v1.AppTest</code> rather than something left to rediscover by accident.</div>
 <pre><code class="cm"># tests/test_streamlit_app.py
