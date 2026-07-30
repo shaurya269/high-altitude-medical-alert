@@ -140,3 +140,74 @@ def test_harespod_replay_matches_available_subjects():
     source = HarespodReplayDataSource(subjects[0], seed=1)
     reading = source.next_reading()
     assert set(reading.keys()) == {"timestamp", "spo2", "hr", "temp", "altitude"}
+
+
+@requires_harespod
+def test_uploaded_subject_matches_the_real_loader_for_the_same_subject():
+    """The upload path (harespod_upload.py) re-derives spo2/hr/altitude via
+    the SAME rescale/interpolation helpers harespod_loader.py's own
+    load_subject() uses -- reading the identical 3 files for a real subject
+    through both paths must produce identical numbers, or the upload
+    adapter has silently drifted from the tested loader."""
+    from src.data import harespod_loader as hl
+    from src.datasource.harespod_upload import load_uploaded_subject
+
+    subject_id = hl.list_subject_ids()[0]
+    subject_dir = hl.HARESPOD_DIR / "Data_Cons" / subject_id
+    uploaded_files = {
+        "hr_5cut.csv": (subject_dir / "hr_5cut.csv").read_bytes(),
+        "spv_5cut.csv": (subject_dir / "spv_5cut.csv").read_bytes(),
+        "key_timestamp.txt": (subject_dir / "key_timestamp.txt").read_bytes(),
+    }
+
+    via_upload = load_uploaded_subject(uploaded_files)
+    via_real_loader = hl.load_subject(subject_id)
+
+    assert len(via_upload) == len(via_real_loader)
+    assert via_upload["spo2"].equals(via_real_loader["spo2"])
+    assert via_upload["hr"].equals(via_real_loader["hr"])
+    assert via_upload["altitude"].equals(via_real_loader["altitude"])
+    # subject_id/data_source columns are the one deliberate difference --
+    # the upload path always tags "harespod_uploaded", never the real
+    # subject's own code, since an ad-hoc upload isn't one of the 15 known
+    # subjects the rest of the pipeline might otherwise assume it is.
+    assert via_upload["subject_id"].iloc[0] == "harespod_uploaded"
+
+
+def test_uploaded_subject_missing_file_raises_a_clear_error():
+    from src.datasource.harespod_upload import load_uploaded_subject
+
+    with pytest.raises(ValueError, match="Missing required file"):
+        load_uploaded_subject({"hr_5cut.csv": b"irrelevant"})
+
+
+@requires_harespod
+def test_uploaded_subject_replays_through_the_full_pipeline():
+    """Confirms the upload path satisfies the DataSource contract well
+    enough for MedicalAlertPipeline to run it end to end, same as any
+    other source."""
+    from src.data import harespod_loader as hl
+    from src.datasource.harespod_upload import HarespodUploadDataSource, load_uploaded_subject
+    from src.pipeline import MedicalAlertPipeline
+
+    subject_id = hl.list_subject_ids()[0]
+    subject_dir = hl.HARESPOD_DIR / "Data_Cons" / subject_id
+    uploaded_files = {
+        "hr_5cut.csv": (subject_dir / "hr_5cut.csv").read_bytes(),
+        "spv_5cut.csv": (subject_dir / "spv_5cut.csv").read_bytes(),
+        "key_timestamp.txt": (subject_dir / "key_timestamp.txt").read_bytes(),
+    }
+    df = load_uploaded_subject(uploaded_files)
+    source = HarespodUploadDataSource(df, seed=1)
+    pipeline = MedicalAlertPipeline(source, min_readings_for_classification=60)
+
+    result = None
+    for _ in range(70):
+        result = pipeline.tick()
+        if result.exhausted:
+            break
+    assert result is not None
+    assert result.severity is not None
+    assert result.severity["severity_label"] in [
+        "Normal", "Mild AMS", "Severe AMS", "HAPE risk", "HACE risk",
+    ]

@@ -52,9 +52,12 @@ from src.data import harespod_loader
 from src.datasource import (
     SCENARIOS,
     HarespodReplayDataSource,
+    HarespodUploadDataSource,
     ManualDataSource,
     ScenarioDataSource,
+    load_uploaded_subject,
 )
+from src.datasource.harespod_upload import REQUIRED_FILENAMES as REQUIRED_HARESPOD_UPLOAD_FILENAMES
 from src.llm.llm_chat import chat as llm_chat_fn
 from src.llm.llm_chat import is_llm_available
 from src.pipeline import MedicalAlertPipeline
@@ -230,18 +233,59 @@ def render_demo_mode_panel() -> None:
             source.set_values(spo2=spo2, hr=hr, temp=temp, altitude=altitude)
 
     else:  # Harespod replay
-        subjects = HarespodReplayDataSource.available_subjects()
-        if not subjects:
-            st.sidebar.warning(
-                "Harespod data not downloaded. See src/data/harespod_loader.py's "
-                "docstring for download steps, or use another Demo Mode instead."
+        replay_mode = st.sidebar.radio(
+            "Harespod source",
+            ["From downloaded dataset", "Upload one patient's files"],
+            key="harespod_replay_mode",
+        )
+
+        if replay_mode == "From downloaded dataset":
+            subjects = HarespodReplayDataSource.available_subjects()
+            if not subjects:
+                st.sidebar.warning(
+                    "Harespod data not downloaded. See src/data/harespod_loader.py's "
+                    "docstring for download steps, use the upload option above instead, "
+                    "or use another Demo Mode."
+                )
+            else:
+                subject_id = st.sidebar.selectbox("Subject recording", subjects)
+                if st.sidebar.button("Start replay", type="primary"):
+                    source = HarespodReplayDataSource(subject_id)
+                    _new_pipeline(source)
+                    st.session_state.source_kind = "replay"
+
+        else:  # Upload one patient's files
+            st.sidebar.caption(
+                "Drop in exactly 3 files for ONE patient, matching the layout of a "
+                "real Harespod `Data_Cons/<subject_id>/` folder: `hr_5cut.csv`, "
+                "`spv_5cut.csv`, and `key_timestamp.txt`. No download of the full "
+                "905MB dataset needed -- these 3 files are all this project's loader "
+                "actually reads per subject."
             )
-        else:
-            subject_id = st.sidebar.selectbox("Subject recording", subjects)
-            if st.sidebar.button("Start replay", type="primary"):
-                source = HarespodReplayDataSource(subject_id)
-                _new_pipeline(source)
-                st.session_state.source_kind = "replay"
+            uploaded = st.sidebar.file_uploader(
+                "Patient files",
+                type=["csv", "txt"],
+                accept_multiple_files=True,
+                key="harespod_upload_files",
+            )
+            if uploaded:
+                # {filename: raw_bytes} -- getvalue() reads Streamlit's in-memory
+                # UploadedFile once per file; matched against REQUIRED_FILENAMES
+                # by exact filename, so files must be named/renamed to match
+                # (case-sensitive) before upload.
+                files_by_name = {f.name: f.getvalue() for f in uploaded}
+                missing = [f for f in REQUIRED_HARESPOD_UPLOAD_FILENAMES if f not in files_by_name]
+                if missing:
+                    st.sidebar.error(f"Missing required file(s): {', '.join(missing)}")
+                elif st.sidebar.button("Start replay from upload", type="primary"):
+                    try:
+                        df = load_uploaded_subject(files_by_name)
+                    except ValueError as exc:
+                        st.sidebar.error(f"Couldn't load this upload: {exc}")
+                    else:
+                        source = HarespodUploadDataSource(df)
+                        _new_pipeline(source)
+                        st.session_state.source_kind = "replay"
 
     st.sidebar.divider()
 
